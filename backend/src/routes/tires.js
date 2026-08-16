@@ -1,10 +1,15 @@
 import { Router } from 'express';
-import { supabase } from '../supabaseClient.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-function toRow(body) {
+// Todas as rotas de pneus exigem login — o middleware anexa req.supabase
+// (já autenticado como o usuário da requisição) e req.userId.
+router.use(requireAuth);
+
+function toRow(body, ownerId) {
   return {
+    owner_id: ownerId,
     marca: body.marca,
     medida: body.medida,
     quantidade: body.quantidade,
@@ -29,9 +34,10 @@ function toApi(row) {
   };
 }
 
-// GET /api/tires — lista todos os pneus
+// GET /api/tires — lista os pneus do usuário logado
+// (a política de RLS já restringe isso sozinha, mas o filtro aqui deixa explícito)
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase
+  const { data, error } = await req.supabase
     .from('tires')
     .select('*')
     .order('created_at', { ascending: true });
@@ -40,16 +46,16 @@ router.get('/', async (req, res) => {
   res.json(data.map(toApi));
 });
 
-// POST /api/tires — cria um pneu
+// POST /api/tires — cria um pneu do usuário logado
 router.post('/', async (req, res) => {
   const { marca, medida, quantidade } = req.body;
   if (!marca || !medida || quantidade === undefined) {
     return res.status(400).json({ error: 'marca, medida e quantidade são obrigatórios' });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await req.supabase
     .from('tires')
-    .insert([toRow(req.body)])
+    .insert([toRow(req.body, req.userId)])
     .select();
 
   if (error) return res.status(500).json({ error: error.message });
@@ -63,8 +69,8 @@ router.post('/bulk', async (req, res) => {
     return res.status(400).json({ error: 'envie { items: [...] } com ao menos um item' });
   }
 
-  const rows = items.map(toRow);
-  const { data, error } = await supabase.from('tires').insert(rows).select();
+  const rows = items.map((i) => toRow(i, req.userId));
+  const { data, error } = await req.supabase.from('tires').insert(rows).select();
 
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data.map(toApi));
@@ -73,9 +79,9 @@ router.post('/bulk', async (req, res) => {
 // PUT /api/tires/:id — atualiza um pneu (edição ou marcar como visto)
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { data, error } = await supabase
+  const { data, error } = await req.supabase
     .from('tires')
-    .update(toRow(req.body))
+    .update(toRow(req.body, req.userId))
     .eq('id', id)
     .select();
 
@@ -87,7 +93,7 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/tires/:id — remove um pneu
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
-  const { error } = await supabase.from('tires').delete().eq('id', id);
+  const { error } = await req.supabase.from('tires').delete().eq('id', id);
 
   if (error) return res.status(500).json({ error: error.message });
   res.status(204).send();

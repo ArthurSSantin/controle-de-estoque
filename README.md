@@ -80,7 +80,52 @@ npx serve .
 
 Se o backend estiver em outro endereço (produção), atualize `frontend/config.js`.
 
-## Publicando na web (tudo em planos gratuitos)
+## Login e isolamento por empresa (multiempresa)
+
+Cada conta (e-mail + senha) enxerga **somente o próprio estoque** — os dados
+são isolados no nível do banco de dados (Row Level Security do Supabase), não
+apenas na tela. Mesmo que alguém tente chamar a API diretamente, só recebe os
+itens da própria conta.
+
+Como funciona:
+
+- O login/cadastro roda direto no navegador, usando o **Supabase Auth**
+  (`frontend/auth.js`), com a chave pública (`anon key`) — é seguro expor essa
+  chave no frontend, pois ela sozinha não dá acesso aos dados.
+- Depois de logado, toda chamada à API leva um token (JWT) no cabeçalho
+  `Authorization`.
+- O backend valida esse token e cria, para aquela requisição, um cliente do
+  Supabase "carimbado" com o usuário logado (`backend/src/middleware/auth.js`
+  + `supabaseForUser`). As políticas de RLS do banco então filtram tudo
+  automaticamente por `owner_id = auth.uid()`.
+
+Se você já tinha rodado o `database/schema.sql` antes (versão sem login),
+**rode o script de novo** — ele foi atualizado para adicionar a coluna
+`owner_id` e trocar a política aberta por uma restrita por usuário.
+
+No Supabase, por padrão, todo cadastro pede confirmação por e-mail antes do
+primeiro login. Se quiser desativar isso para testar mais rápido: **Authentication
+→ Providers → Email → desmarque "Confirm email"**.
+
+## Estrutura do projeto (atualizada)
+
+```
+frontend/
+├── index.html   → agora inclui a tela de login/cadastro
+├── auth.js       → login, cadastro e logout (fala direto com o Supabase Auth)
+├── auth.css       → estilo das telas de login/cadastro
+├── app.js          → lógica do estoque (agora só roda depois do login)
+├── style.css
+└── config.js        → apiBase + credenciais públicas do Supabase (URL e anon key)
+
+backend/src/
+├── server.js
+├── supabaseClient.js  → cria um cliente Supabase por usuário logado
+├── middleware/auth.js  → valida o token e libera o acesso às rotas
+└── routes/tires.js      → cada rota já roda "como" o usuário da requisição
+```
+
+
 
 | Camada    | Sugestão                                  |
 |-----------|---------------------------------------------|

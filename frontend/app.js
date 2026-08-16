@@ -8,16 +8,24 @@
   ========================================================================= */
   const API_BASE = (window.APP_CONFIG && window.APP_CONFIG.apiBase) || 'http://localhost:3000/api';
 
+  async function authHeaders(){
+    const token = await window.getAccessToken();
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  }
+
   const api = {
     async list(){
-      const res = await fetch(`${API_BASE}/tires`);
+      const res = await fetch(`${API_BASE}/tires`, { headers: await authHeaders() });
       if(!res.ok) throw new Error('Falha ao carregar o estoque');
       return res.json();
     },
     async create(tire){
       const res = await fetch(`${API_BASE}/tires`, {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: await authHeaders(),
         body: JSON.stringify(tire)
       });
       if(!res.ok) throw new Error('Falha ao criar item');
@@ -26,7 +34,7 @@
     async bulkCreate(items){
       const res = await fetch(`${API_BASE}/tires/bulk`, {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: await authHeaders(),
         body: JSON.stringify({ items })
       });
       if(!res.ok) throw new Error('Falha ao criar itens em lote');
@@ -35,14 +43,17 @@
     async update(id, tire){
       const res = await fetch(`${API_BASE}/tires/${id}`, {
         method: 'PUT',
-        headers: {'Content-Type':'application/json'},
+        headers: await authHeaders(),
         body: JSON.stringify(tire)
       });
       if(!res.ok) throw new Error('Falha ao atualizar item');
       return res.json();
     },
     async remove(id){
-      const res = await fetch(`${API_BASE}/tires/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/tires/${id}`, {
+        method: 'DELETE',
+        headers: await authHeaders()
+      });
       if(!res.ok) throw new Error('Falha ao excluir item');
     }
   };
@@ -556,5 +567,5 @@
     };
   });
 
-  load();
+  window.__bootApp = load;
 })();
