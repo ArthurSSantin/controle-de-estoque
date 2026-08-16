@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Estoque de Pneus</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <h1>Estoque de Pneus</h1>
+        <span>Controle por medida e quantidade</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" id="scanBtn">📷 Entrada por nota fiscal</button>
+      <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="toolbar">
+    <div class="search">
+      <input type="text" id="searchInput" placeholder="Buscar por marca ou medida...">
+    </div>
+    <div class="chip-group" id="condFilterGroup">
+      <button class="chip active" data-cond="todos">Todos</button>
+      <button class="chip" data-cond="novo">🟢 Novo</button>
+      <button class="chip" data-cond="usado">⚙ Usado</button>
+    </div>
+    <button class="chip" id="novoChip">🏷 Recentes <span class="badge-count" id="novoCount">0</span></button>
+    <button class="btn btn-ghost" id="clearSearchBtn">Limpar</button>
+  </div>
+
+  <!-- FORMULÁRIO MANUAL -->
+  <div class="panel" id="formPanel">
+    <h2 id="formTitle">Adicionar pneu</h2>
+    <p class="sub">Preencha os dados do item</p>
+    <div class="form-grid">
+      <div class="field">
+        <label for="fMarca">Marca / modelo</label>
+        <input type="text" id="fMarca" placeholder="Ex: Pirelli Cinturato">
+      </div>
+      <div class="field">
+        <label for="fMedida">Medida</label>
+        <input type="text" id="fMedida" placeholder="Ex: 185/65 R14">
+        <small>Use o formato com "R" + aro (R13 a R20)</small>
+      </div>
+      <div class="field">
+        <label for="fQtd">Quantidade</label>
+        <input type="number" id="fQtd" min="0" step="1" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="fPreco">Preço (R$)</label>
+        <input type="text" id="fPreco" placeholder="Opcional">
+      </div>
+      <div class="field">
+        <label for="fCondicao">Condição</label>
+        <select id="fCondicao">
+          <option value="novo">Novo</option>
+          <option value="usado">Usado</option>
+        </select>
+      </div>
+    </div>
+    <div class="err" id="formErr"></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="cancelBtn">Cancelar</button>
+      <button class="btn btn-primary" id="saveBtn">Salvar</button>
+    </div>
+  </div>
+
+  <!-- ENTRADA POR NOTA FISCAL -->
+  <div class="panel" id="scanPanel">
+    <h2>Entrada por nota fiscal</h2>
+    <p class="sub">Aponte a câmera para o código de barras ou QR Code da nota (DANFE / NFC-e)</p>
+
+    <div id="scanStage">
+      <div id="reader"></div>
+      <p class="scan-hint">Aguardando leitura...</p>
+    </div>
+
+    <div id="notaResult" style="display:none;">
+      <div class="nota-info">
+        <span>Nota identificada — chave: <b id="notaChaveShown">—</b></span>
+        <button class="btn btn-ghost" id="rescanBtn" style="padding:6px 12px;font-size:12.5px;">Escanear outra</button>
+      </div>
+      <p class="sub" style="margin-bottom:14px;">
+        O código da nota não traz os itens automaticamente — informe abaixo os pneus recebidos nessa entrega.
+        Eles entrarão no estoque já vinculados a esta nota e marcados como <b>novos</b>.
+      </p>
+      <div id="batchRows"></div>
+      <div class="form-actions" style="justify-content:space-between;margin-top:10px;">
+        <button class="btn btn-ghost" id="addBatchRowBtn">+ Adicionar linha</button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-ghost" id="cancelBatchBtn">Cancelar</button>
+          <button class="btn btn-primary" id="saveBatchBtn">Salvar entrada</button>
+        </div>
+      </div>
+      <div class="err" id="batchErr"></div>
+    </div>
+  </div>
+
+  <div id="content">
+    <div class="loading">Carregando estoque...</div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
