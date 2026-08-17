@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="auth.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -77,6 +78,7 @@
         <button class="btn btn-ghost" id="logoutBtn">Sair</button>
       </div>
       <button class="btn btn-secondary" id="scanBtn">📷 Entrada por nota fiscal</button>
+      <button class="btn btn-secondary" id="importBtn">📊 Importar planilha</button>
       <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
     </div>
   </div>
@@ -141,12 +143,20 @@
     <div id="scanStage">
       <div id="reader"></div>
       <p class="scan-hint">Aguardando leitura...</p>
+      <div class="scan-alt">
+        <label for="scanFileInput" class="btn btn-ghost scan-upload-btn">📁 Enviar foto do código</label>
+        <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
+        <p class="scan-alt-hint">Câmera não funcionou? Tire uma foto do código de barras/QR da nota e envie aqui.</p>
+      </div>
     </div>
 
     <div id="notaResult" style="display:none;">
       <div class="nota-info">
         <span>Nota identificada — chave: <b id="notaChaveShown">—</b></span>
-        <button class="btn btn-ghost" id="rescanBtn" style="padding:6px 12px;font-size:12.5px;">Escanear outra</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" id="openNotaLinkBtn" style="padding:6px 12px;font-size:12.5px;display:none;">Abrir nota ↗</button>
+          <button class="btn btn-ghost" id="rescanBtn" style="padding:6px 12px;font-size:12.5px;">Escanear outra</button>
+        </div>
       </div>
       <p class="sub" style="margin-bottom:14px;">
         O código da nota não traz os itens automaticamente — informe abaixo os pneus recebidos nessa entrega.
@@ -162,6 +172,32 @@
       </div>
       <div class="err" id="batchErr"></div>
     </div>
+  </div>
+
+  <!-- IMPORTAR PLANILHA -->
+  <div class="panel" id="importPanel">
+    <h2>Importar planilha</h2>
+    <p class="sub">
+      Envie um arquivo .xlsx, .xls ou .csv com colunas Marca, Medida, Quantidade, Preço e Condição
+      (não precisa ter todas — só Marca, Medida e Quantidade são obrigatórias).
+    </p>
+
+    <div class="import-upload">
+      <label for="importFileInput" class="btn btn-primary">📁 Escolher planilha</label>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+      <button class="btn btn-ghost" id="downloadTemplateBtn">Baixar planilha modelo</button>
+    </div>
+
+    <div id="importRows"></div>
+
+    <div class="form-actions" style="justify-content:space-between;margin-top:10px;">
+      <button class="btn btn-ghost" id="addImportRowBtn">+ Adicionar linha</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" id="cancelImportBtn">Cancelar</button>
+        <button class="btn btn-primary" id="saveImportBtn">Salvar importação</button>
+      </div>
+    </div>
+    <div class="err" id="importErr"></div>
   </div>
 
   <div id="content">
