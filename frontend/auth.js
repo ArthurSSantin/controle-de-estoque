@@ -52,13 +52,18 @@
   loginForm.addEventListener('submit', async (e)=>{
     e.preventDefault();
     loginErr.classList.remove('show');
+    const btn = loginForm.querySelector('button[type="submit"]');
+    btn.disabled = true;
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
     if(error){
       loginErr.textContent = error.message.includes('Invalid login')
         ? 'E-mail ou senha incorretos.'
-        : 'Não foi possível entrar. Tente novamente.';
+        : error.status === 429
+          ? 'Muitas tentativas em sequência. Aguarde alguns minutos e tente de novo.'
+          : 'Não foi possível entrar. Tente novamente.';
       loginErr.classList.add('show');
     }
   });
@@ -66,18 +71,25 @@
   signupForm.addEventListener('submit', async (e)=>{
     e.preventDefault();
     signupErr.classList.remove('show');
+    signupErr.style.color = '';
+    const btn = signupForm.querySelector('button[type="submit"]');
+    btn.disabled = true;
     const email = document.getElementById('signupEmail').value.trim();
     const password = document.getElementById('signupPassword').value;
     if(password.length < 6){
       signupErr.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
       signupErr.classList.add('show');
+      btn.disabled = false;
       return;
     }
     const { error } = await supabase.auth.signUp({ email, password });
+    btn.disabled = false;
     if(error){
       signupErr.textContent = error.message.includes('already registered')
         ? 'Este e-mail já tem uma conta. Faça login.'
-        : 'Não foi possível criar a conta. Tente novamente.';
+        : error.status === 429
+          ? 'Muitas tentativas em sequência. Aguarde alguns minutos e tente de novo.'
+          : 'Não foi possível criar a conta. Tente novamente.';
       signupErr.classList.add('show');
       return;
     }
