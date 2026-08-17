@@ -177,6 +177,18 @@
     font-family:'IBM Plex Mono',monospace;
     font-size:11.5px;
   }
+  .sort-select{
+    border:1.5px solid var(--line);
+    background:var(--surface);
+    color:var(--ink);
+    font-weight:600;
+    font-size:13px;
+    padding:9px 12px;
+    border-radius:20px;
+    cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .sort-select:focus{outline:2px solid var(--amber);outline-offset:1px;}
 
   /* FORM PANEL */
   .panel{
@@ -263,31 +275,11 @@
     flex-wrap:wrap;
   }
   .nota-info b{font-family:'IBM Plex Mono',monospace;}
-  #reader{
-    width:100%;
-    max-width:420px;
-    margin:0 auto 14px;
-    border-radius:10px;
-    overflow:hidden;
-    border:1.5px solid var(--line);
-  }
   .scan-hint{
     text-align:center;
     font-size:13px;
     color:var(--ink-soft);
     margin-bottom:14px;
-  }
-  .scan-alt{
-    text-align:center;
-    border-top:1px dashed var(--line);
-    padding-top:14px;
-    margin-bottom:6px;
-  }
-  .scan-upload-btn{display:inline-flex;cursor:pointer;}
-  .scan-alt-hint{
-    font-size:12px;
-    color:var(--ink-soft);
-    margin:8px 0 0;
   }
   .import-upload{
     display:flex;
@@ -408,6 +400,20 @@
     padding:2px 7px;
     border-radius:20px;
     text-transform:uppercase;
+  }
+  .tag-impar{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    background:var(--rust-bg);
+    color:var(--rust);
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.03em;
+    padding:2px 7px;
+    border-radius:20px;
+    text-transform:uppercase;
+    border:1px solid var(--rust);
   }
   .col-size{
     font-family:'IBM Plex Mono',monospace;
