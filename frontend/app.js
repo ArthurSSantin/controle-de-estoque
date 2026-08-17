@@ -73,6 +73,7 @@
   const statsEl = document.getElementById('stats');
   const formPanel = document.getElementById('formPanel');
   const scanPanel = document.getElementById('scanPanel');
+  const importPanel = document.getElementById('importPanel');
   const formTitle = document.getElementById('formTitle');
   const formErr = document.getElementById('formErr');
   const toast = document.getElementById('toast');
@@ -315,6 +316,7 @@
 
   function openAddForm(){
     closeScanPanel();
+    closeImportPanel();
     editingId = null;
     formTitle.textContent = 'Adicionar pneu';
     fMarca.value = ''; fMedida.value = ''; fQtd.value = ''; fPreco.value = ''; fCondicao.value = 'novo';
@@ -325,6 +327,7 @@
 
   function openEditForm(id){
     closeScanPanel();
+    closeImportPanel();
     const t = tires.find(x=>x.id===id);
     if(!t) return;
     editingId = id;
@@ -398,6 +401,7 @@
 
   function openScanPanel(){
     closeForm();
+    closeImportPanel();
     scanPanel.classList.add('open');
     document.getElementById('scanStage').style.display = 'block';
     document.getElementById('notaResult').style.display = 'none';
@@ -413,27 +417,61 @@
   function startScanner(){
     if(typeof Html5Qrcode === 'undefined'){
       document.querySelector('#scanStage .scan-hint').textContent =
-        'Não foi possível carregar o leitor de câmera. Verifique sua conexão.';
+        'Não foi possível carregar o leitor de câmera. Verifique sua conexão e recarregue a página.';
       return;
     }
+
+    const hint = document.querySelector('#scanStage .scan-hint');
+    hint.textContent = 'Solicitando acesso à câmera...';
+
     html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 240 },
-      onScanSuccess,
-      ()=>{ /* leitura em andamento, ignora frames sem código */ }
-    ).catch(()=>{
-      document.querySelector('#scanStage .scan-hint').textContent =
-        'Não foi possível acessar a câmera. Verifique as permissões do navegador.';
+
+    // Busca as câmeras disponíveis e prefere a traseira — mais confiável do que
+    // depender só de facingMode, que falha em vários notebooks/desktops.
+    Html5Qrcode.getCameras().then(cameras=>{
+      if(!cameras || cameras.length === 0){
+        hint.textContent = 'Nenhuma câmera encontrada neste dispositivo. Use a opção "Enviar foto do código" abaixo.';
+        return;
+      }
+      const traseira = cameras.find(c => /back|traseir|rear|environment/i.test(c.label));
+      const cameraId = (traseira || cameras[cameras.length - 1]).id;
+
+      html5QrCode.start(
+        cameraId,
+        { fps: 10, qrbox: 240 },
+        onScanSuccess,
+        ()=>{ /* leitura em andamento, ignora frames sem código */ }
+      ).catch(err=>{
+        hint.textContent = 'Não foi possível iniciar a câmera (' + (err && err.message ? err.message : 'permissão negada') + '). Use a opção "Enviar foto do código" abaixo.';
+      });
+    }).catch(err=>{
+      hint.textContent = 'Acesso à câmera negado ou indisponível neste navegador. Use a opção "Enviar foto do código" abaixo.';
     });
   }
 
   function stopScanner(){
     if(html5QrCode){
-      html5QrCode.stop().catch(()=>{});
-      html5QrCode.clear();
+      html5QrCode.stop().then(()=>html5QrCode.clear()).catch(()=>{
+        try{ html5QrCode.clear(); }catch(e){}
+      });
       html5QrCode = null;
     }
+  }
+
+  function scanFromUploadedFile(file){
+    const hint = document.querySelector('#scanStage .scan-hint');
+    hint.textContent = 'Lendo código na imagem enviada...';
+    stopScanner();
+    const fileScanner = new Html5Qrcode("reader");
+    fileScanner.scanFile(file, false)
+      .then(decodedText=>{
+        fileScanner.clear();
+        onScanSuccess(decodedText);
+      })
+      .catch(()=>{
+        fileScanner.clear().catch(()=>{});
+        hint.textContent = 'Não foi possível ler nenhum código nessa imagem. Tente uma foto mais nítida, focando bem no código de barras/QR.';
+      });
   }
 
   function onScanSuccess(decodedText){
@@ -441,22 +479,29 @@
     // a chave de acesso da NFe/NFC-e tem 44 dígitos, geralmente dentro da URL do QR Code
     const digits = (decodedText.match(/\d/g) || []).join('');
     const chaveMatch = /\d{44}/.exec(digits);
+    const isUrl = /^https?:\/\//i.test(decodedText.trim());
     scannedNota = {
       chave: chaveMatch ? chaveMatch[0] : null,
-      raw: decodedText
+      raw: decodedText,
+      url: isUrl ? decodedText.trim() : null
     };
     document.getElementById('scanStage').style.display = 'none';
     document.getElementById('notaResult').style.display = 'block';
     document.getElementById('notaChaveShown').textContent =
       scannedNota.chave ? scannedNota.chave.slice(-8) + ' (final)' : 'não identificada — código lido: ' + decodedText.slice(0,30);
 
+    const openLinkBtn = document.getElementById('openNotaLinkBtn');
+    openLinkBtn.style.display = scannedNota.url ? 'inline-flex' : 'none';
+
     document.getElementById('batchRows').innerHTML = '';
     batchRowCount = 0;
-    addBatchRow();
+    addBatchRow('batchRows');
     showToast('Código lido. Informe os itens recebidos.');
   }
 
-  function addBatchRow(){
+  function addBatchRow(containerId, prefill){
+    containerId = containerId || 'batchRows';
+    prefill = prefill || {};
     batchRowCount++;
     const id = 'b' + batchRowCount;
     const div = document.createElement('div');
@@ -475,16 +520,23 @@
       </div>
       <button class="rm" title="Remover linha">✕</button>
     `;
+    if(prefill.marca) div.querySelector('.b-marca').value = prefill.marca;
+    if(prefill.medida) div.querySelector('.b-medida').value = prefill.medida;
+    if(prefill.quantidade !== undefined && prefill.quantidade !== '') div.querySelector('.b-qtd').value = prefill.quantidade;
+    if(prefill.preco) div.querySelector('.b-preco').value = prefill.preco;
+    if(prefill.condicao === 'usado') div.querySelector('.b-condicao').value = 'usado';
     div.querySelector('.rm').onclick = ()=> div.remove();
-    document.getElementById('batchRows').appendChild(div);
+    document.getElementById(containerId).appendChild(div);
+    return div;
   }
 
-  async function saveBatch(){
-    const rows = document.querySelectorAll('#batchRows .batch-row');
-    const batchErr = document.getElementById('batchErr');
-    batchErr.classList.remove('show');
+  function collectRows(containerId){
+    return document.querySelectorAll(`#${containerId} .batch-row`);
+  }
 
-    const newItems = [];
+  function rowsToItems(containerId, errEl, notaRefValue){
+    const rows = collectRows(containerId);
+    const items = [];
     for(const row of rows){
       const marca = row.querySelector('.b-marca').value.trim();
       const medida = row.querySelector('.b-medida').value.trim();
@@ -493,16 +545,26 @@
       const condicao = row.querySelector('.b-condicao').value;
       if(!marca && !medida && !qtd) continue; // linha vazia, ignora
       if(!marca || !medida || qtd === '' || !validMedida(medida)){
-        batchErr.textContent = 'Verifique se todas as linhas têm marca, medida válida (R13–R20) e quantidade.';
-        batchErr.classList.add('show');
-        return;
+        errEl.textContent = 'Verifique se todas as linhas têm marca, medida válida (R13–R20) e quantidade.';
+        errEl.classList.add('show');
+        return null;
       }
-      newItems.push({
+      items.push({
         marca, medida, quantidade: Number(qtd), preco, condicao,
         novo: true,
-        notaRef: scannedNota && scannedNota.chave ? scannedNota.chave.slice(-8) : 'nota s/ chave'
+        notaRef: notaRefValue
       });
     }
+    return items;
+  }
+
+  async function saveBatch(){
+    const batchErr = document.getElementById('batchErr');
+    batchErr.classList.remove('show');
+
+    const notaRefValue = scannedNota && scannedNota.chave ? scannedNota.chave.slice(-8) : 'nota s/ chave';
+    const newItems = rowsToItems('batchRows', batchErr, notaRefValue);
+    if(newItems === null) return;
 
     if(newItems.length === 0){
       batchErr.textContent = 'Adicione pelo menos um item.';
@@ -522,7 +584,129 @@
     }
   }
 
-  /* ---------- EVENTOS ---------- */
+  /* ---------- IMPORTAR PLANILHA (EXCEL / CSV) ---------- */
+
+  function normalizeHeader(h){
+    return String(h||'')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
+      .trim();
+  }
+
+  const HEADER_MAP = {
+    marca: 'marca', modelo: 'marca',
+    medida: 'medida', tamanho: 'medida', aro: 'medida',
+    quantidade: 'quantidade', qtd: 'quantidade', qtde: 'quantidade',
+    preco: 'preco', valor: 'preco', 'preco unitario': 'preco', 'valor unitario': 'preco',
+    condicao: 'condicao', estado: 'condicao'
+  };
+
+  function parseSpreadsheet(file){
+    return new Promise((resolve, reject)=>{
+      if(typeof XLSX === 'undefined'){
+        reject(new Error('Biblioteca de planilhas não carregou. Verifique sua conexão e recarregue a página.'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e)=>{
+        try{
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+          resolve(rows);
+        }catch(err){
+          reject(err);
+        }
+      };
+      reader.onerror = ()=> reject(new Error('Não foi possível ler o arquivo.'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function mapSpreadsheetRow(row){
+    const mapped = {};
+    Object.keys(row).forEach(key=>{
+      const canonical = HEADER_MAP[normalizeHeader(key)];
+      if(canonical) mapped[canonical] = String(row[key]).trim();
+    });
+    if(mapped.condicao){
+      mapped.condicao = /usad/i.test(mapped.condicao) ? 'usado' : 'novo';
+    }
+    return mapped;
+  }
+
+  function openImportPanel(){
+    closeForm();
+    closeScanPanel();
+    importPanel.classList.add('open');
+    document.getElementById('importRows').innerHTML = '';
+    document.getElementById('importErr').classList.remove('show');
+    document.getElementById('importFileInput').value = '';
+  }
+
+  function closeImportPanel(){
+    importPanel.classList.remove('open');
+  }
+
+  function downloadTemplate(){
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Marca', 'Medida', 'Quantidade', 'Preço', 'Condição'],
+      ['Pirelli', '185/65 R14', 4, '350', 'Novo'],
+      ['Michelin', '225/45 R18', 2, '', 'Usado']
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pneus');
+    XLSX.writeFile(wb, 'modelo-importacao-pneus.xlsx');
+  }
+
+  async function handleSpreadsheetUpload(file){
+    const importErr = document.getElementById('importErr');
+    importErr.classList.remove('show');
+    try{
+      const rawRows = await parseSpreadsheet(file);
+      if(rawRows.length === 0){
+        importErr.textContent = 'A planilha está vazia.';
+        importErr.classList.add('show');
+        return;
+      }
+      document.getElementById('importRows').innerHTML = '';
+      batchRowCount = 0;
+      rawRows.forEach(row=>{
+        const mapped = mapSpreadsheetRow(row);
+        addBatchRow('importRows', mapped);
+      });
+      showToast(`${rawRows.length} linha(s) lidas. Confira antes de salvar.`);
+    }catch(err){
+      importErr.textContent = err.message || 'Não foi possível ler essa planilha.';
+      importErr.classList.add('show');
+    }
+  }
+
+  async function saveImport(){
+    const importErr = document.getElementById('importErr');
+    importErr.classList.remove('show');
+
+    const newItems = rowsToItems('importRows', importErr, 'planilha importada');
+    if(newItems === null) return;
+
+    if(newItems.length === 0){
+      importErr.textContent = 'Nenhum item válido para importar.';
+      importErr.classList.add('show');
+      return;
+    }
+
+    try{
+      const created = await api.bulkCreate(newItems);
+      tires.push(...created);
+      closeImportPanel();
+      render();
+      showToast(`${created.length} item(ns) importados da planilha.`);
+    }catch(e){
+      importErr.textContent = 'Não foi possível salvar os itens. Verifique sua conexão com a API.';
+      importErr.classList.add('show');
+    }
+  }
 
   document.getElementById('toggleFormBtn').onclick = ()=>{
     if(formPanel.classList.contains('open')){ closeForm(); }
@@ -541,9 +725,29 @@
     document.querySelector('#scanStage .scan-hint').textContent = 'Aguardando leitura...';
     startScanner();
   };
+  document.getElementById('scanFileInput').onchange = (e)=>{
+    const file = e.target.files[0];
+    if(file) scanFromUploadedFile(file);
+  };
+  document.getElementById('openNotaLinkBtn').onclick = ()=>{
+    if(scannedNota && scannedNota.url) window.open(scannedNota.url, '_blank');
+  };
   document.getElementById('cancelBatchBtn').onclick = closeScanPanel;
-  document.getElementById('addBatchRowBtn').onclick = addBatchRow;
+  document.getElementById('addBatchRowBtn').onclick = ()=> addBatchRow('batchRows');
   document.getElementById('saveBatchBtn').onclick = saveBatch;
+
+  document.getElementById('importBtn').onclick = ()=>{
+    if(importPanel.classList.contains('open')){ closeImportPanel(); }
+    else { openImportPanel(); }
+  };
+  document.getElementById('importFileInput').onchange = (e)=>{
+    const file = e.target.files[0];
+    if(file) handleSpreadsheetUpload(file);
+  };
+  document.getElementById('downloadTemplateBtn').onclick = downloadTemplate;
+  document.getElementById('addImportRowBtn').onclick = ()=> addBatchRow('importRows');
+  document.getElementById('cancelImportBtn').onclick = closeImportPanel;
+  document.getElementById('saveImportBtn').onclick = saveImport;
 
   document.getElementById('searchInput').oninput = (e)=>{
     searchTerm = e.target.value;
