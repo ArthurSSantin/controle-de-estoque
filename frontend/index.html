@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="auth.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 
@@ -77,8 +77,8 @@
         <span>Logado como <b id="userEmail"></b></span>
         <button class="btn btn-ghost" id="logoutBtn">Sair</button>
       </div>
-      <button class="btn btn-secondary" id="scanBtn">📷 Entrada por nota fiscal</button>
-      <button class="btn btn-secondary" id="importBtn">📊 Importar planilha</button>
+      <button class="btn btn-secondary" id="xmlBtn">📄 Entrada por XML (NF-e)</button>
+      <button class="btn btn-secondary" id="importBtn">📊 Importar planilha/PDF</button>
       <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
     </div>
   </div>
@@ -95,6 +95,11 @@
       <button class="chip" data-cond="usado">⚙ Usado</button>
     </div>
     <button class="chip" id="novoChip">🏷 Recentes <span class="badge-count" id="novoCount">0</span></button>
+    <select id="sortModeSelect" class="sort-select">
+      <option value="aro">Ordenar por aro</option>
+      <option value="qtd_asc">Menor quantidade primeiro</option>
+      <option value="qtd_desc">Maior quantidade primeiro</option>
+    </select>
     <button class="btn btn-ghost" id="clearSearchBtn">Limpar</button>
   </div>
 
@@ -135,58 +140,57 @@
     </div>
   </div>
 
-  <!-- ENTRADA POR NOTA FISCAL -->
-  <div class="panel" id="scanPanel">
-    <h2>Entrada por nota fiscal</h2>
-    <p class="sub">Aponte a câmera para o código de barras ou QR Code da nota (DANFE / NFC-e)</p>
-
-    <div id="scanStage">
-      <div id="reader"></div>
-      <p class="scan-hint">Aguardando leitura...</p>
-      <div class="scan-alt">
-        <label for="scanFileInput" class="btn btn-ghost scan-upload-btn">📁 Enviar foto do código</label>
-        <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none;">
-        <p class="scan-alt-hint">Câmera não funcionou? Tire uma foto do código de barras/QR da nota e envie aqui.</p>
-      </div>
-    </div>
-
-    <div id="notaResult" style="display:none;">
-      <div class="nota-info">
-        <span>Nota identificada — chave: <b id="notaChaveShown">—</b></span>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-ghost" id="openNotaLinkBtn" style="padding:6px 12px;font-size:12.5px;display:none;">Abrir nota ↗</button>
-          <button class="btn btn-ghost" id="rescanBtn" style="padding:6px 12px;font-size:12.5px;">Escanear outra</button>
-        </div>
-      </div>
-      <p class="sub" style="margin-bottom:14px;">
-        O código da nota não traz os itens automaticamente — informe abaixo os pneus recebidos nessa entrega.
-        Eles entrarão no estoque já vinculados a esta nota e marcados como <b>novos</b>.
-      </p>
-      <div id="batchRows"></div>
-      <div class="form-actions" style="justify-content:space-between;margin-top:10px;">
-        <button class="btn btn-ghost" id="addBatchRowBtn">+ Adicionar linha</button>
-        <div style="display:flex;gap:10px;">
-          <button class="btn btn-ghost" id="cancelBatchBtn">Cancelar</button>
-          <button class="btn btn-primary" id="saveBatchBtn">Salvar entrada</button>
-        </div>
-      </div>
-      <div class="err" id="batchErr"></div>
-    </div>
-  </div>
-
-  <!-- IMPORTAR PLANILHA -->
-  <div class="panel" id="importPanel">
-    <h2>Importar planilha</h2>
+  <!-- ENTRADA POR XML (NF-e) -->
+  <div class="panel" id="xmlPanel">
+    <h2>Entrada por XML (NF-e)</h2>
     <p class="sub">
-      Envie um arquivo .xlsx, .xls ou .csv com colunas Marca, Medida, Quantidade, Preço e Condição
-      (não precisa ter todas — só Marca, Medida e Quantidade são obrigatórias).
+      Envie o arquivo .xml da nota fiscal (o mesmo que seu fornecedor te envia, ou que você baixa do portal da nota).
+      O app lê os produtos automaticamente — marca, medida, quantidade e valor.
     </p>
 
     <div class="import-upload">
-      <label for="importFileInput" class="btn btn-primary">📁 Escolher planilha</label>
-      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+      <label for="xmlFileInput" class="btn btn-primary">📁 Escolher arquivo XML</label>
+      <input type="file" id="xmlFileInput" accept=".xml,text/xml" style="display:none;">
+    </div>
+
+    <div id="xmlStatus" class="scan-hint" style="display:none;"></div>
+
+    <div id="xmlResult" style="display:none;">
+      <div class="nota-info">
+        <span>Nota identificada — chave: <b id="xmlChaveShown">—</b></span>
+        <button class="btn btn-ghost" id="rescanXmlBtn" style="padding:6px 12px;font-size:12.5px;">Enviar outro XML</button>
+      </div>
+      <p class="sub" style="margin-bottom:14px;">
+        Confira os itens lidos do XML antes de salvar — corrija o que precisar.
+        Eles entrarão no estoque já vinculados a esta nota e marcados como <b>novos</b>.
+      </p>
+      <div id="xmlRows"></div>
+      <div class="form-actions" style="justify-content:space-between;margin-top:10px;">
+        <button class="btn btn-ghost" id="addXmlRowBtn">+ Adicionar linha</button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-ghost" id="cancelXmlBtn">Cancelar</button>
+          <button class="btn btn-primary" id="saveXmlBtn">Salvar entrada</button>
+        </div>
+      </div>
+      <div class="err" id="xmlErr"></div>
+    </div>
+  </div>
+
+  <!-- IMPORTAR PLANILHA / PDF -->
+  <div class="panel" id="importPanel">
+    <h2>Importar planilha ou relatório em PDF</h2>
+    <p class="sub">
+      Envie um arquivo .xlsx, .xls, .csv (colunas Marca, Medida, Quantidade, Preço, Condição)
+      ou um PDF de relatório de estoque — o app tenta ler Marca, Medida, Quantidade e Valor de venda automaticamente.
+    </p>
+
+    <div class="import-upload">
+      <label for="importFileInput" class="btn btn-primary">📁 Escolher arquivo</label>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
       <button class="btn btn-ghost" id="downloadTemplateBtn">Baixar planilha modelo</button>
     </div>
+
+    <div id="importStatus" class="scan-hint" style="display:none;"></div>
 
     <div id="importRows"></div>
 

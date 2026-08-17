@@ -37,8 +37,10 @@ do navegador do usuário.
 - **Ordenação automática** por aro, do R13 ao R20, agrupando os itens.
 - **Tag "recente"**: todo item novo entra marcado; some quando você clica no ✓ (marcar como visto). Filtrável pelo chip "🏷 Recentes".
 - **Tag de condição** (Novo / Usado): filtrável pelos chips "🟢 Novo" / "⚙ Usado".
-- **Entrada por nota fiscal**: escaneia o código de barras/QR da nota pela câmera e abre um formulário rápido para lançar os itens recebidos, já vinculados à nota.
-  > O código da nota (DANFE/NFC-e) só contém a *chave de acesso* — não a lista de itens. Ler os produtos automaticamente exigiria integração com a SEFAZ (certificado digital) ou um serviço pago (ex: NFe.io, PlugNotas). Por isso o scanner identifica a nota e agiliza o lançamento manual dos itens daquela entrega.
+- **Entrada por XML (NF-e)**: envie o arquivo `.xml` da nota fiscal — o app lê marca (a partir da descrição do produto), medida, quantidade e valor unitário automaticamente, direto das tags `<det><prod>` do XML. Muito mais confiável que ler código de barras: o XML já traz os produtos de verdade, o código de barras/QR só traz a chave da nota.
+- **Importar planilha ou PDF**: aceita `.xlsx`/`.xls`/`.csv` (com colunas Marca, Medida, Quantidade, Preço, Condição) ou um PDF de relatório de estoque — o app tenta reconhecer Marca, Medida, Quantidade e Valor de venda automaticamente. Tanto o XML quanto a importação sempre abrem uma tela de revisão antes de salvar, para corrigir qualquer item mal interpretado.
+- **Ordenação**: por aro (R13–R20, padrão) ou por quantidade em estoque (crescente/decrescente) — útil para achar rápido o que está acabando.
+- **Selo de quantidade ímpar**: itens com quantidade ímpar (1, 3, 5...) ganham um selo vermelho "ímpar", já que pneus normalmente são vendidos em pares.
 
 ## Rodando localmente
 
@@ -111,21 +113,43 @@ primeiro login. Se quiser desativar isso para testar mais rápido: **Authenticat
 
 ```
 frontend/
-├── index.html   → agora inclui a tela de login/cadastro
-├── auth.js       → login, cadastro e logout (fala direto com o Supabase Auth)
-├── auth.css       → estilo das telas de login/cadastro
-├── app.js          → lógica do estoque (agora só roda depois do login)
+├── index.html    → telas de login/cadastro + app
+├── auth.js        → login, cadastro e logout (fala direto com o Supabase Auth)
+├── auth.css        → estilo das telas de login/cadastro
+├── app.js           → lógica do estoque: CRUD, XML de NF-e, importação de
+│                       planilha/PDF, ordenação, filtros (só roda após login)
 ├── style.css
-└── config.js        → apiBase + credenciais públicas do Supabase (URL e anon key)
+└── config.js         → apiBase + credenciais públicas do Supabase (URL e anon key)
 
 backend/src/
-├── server.js
+├── server.js          → helmet (segurança), CORS restrito, rate limiting
 ├── supabaseClient.js  → cria um cliente Supabase por usuário logado
 ├── middleware/auth.js  → valida o token e libera o acesso às rotas
-└── routes/tires.js      → cada rota já roda "como" o usuário da requisição
+└── routes/tires.js      → cada rota roda "como" o usuário da requisição,
+                            com validação de entrada em todos os campos
 ```
 
+## Segurança do backend
 
+- **Autenticação obrigatória** em todas as rotas de `/api/tires` — sem token
+  válido do Supabase Auth, a API recusa a requisição.
+- **Isolamento por linha (RLS)** no banco: mesmo que alguém descubra o ID de
+  um item de outra empresa, a política do Postgres impede a leitura/edição.
+- **Validação no servidor**, não só no navegador: marca, medida (formato
+  R13–R20), quantidade (inteiro ≥ 0) e preço são conferidos de novo no
+  backend antes de qualquer escrita no banco — nunca confie só na validação
+  do frontend, qualquer um pode chamar a API diretamente.
+- **CORS restrito**: configure `ALLOWED_ORIGIN` no `.env` do backend com a
+  URL do seu frontend em produção. Sem essa variável, a API aceita chamadas
+  de qualquer origem (ok para desenvolvimento local, não recomendado em
+  produção).
+- **Rate limiting**: no máximo 300 requisições por IP a cada 15 minutos,
+  protegendo contra abuso.
+- **Helmet**: cabeçalhos HTTP de segurança padrão (proteção contra
+  clickjacking, sniffing de tipo MIME, etc.).
+- **Erros genéricos**: a API nunca devolve detalhes internos (stack trace,
+  mensagens cruas do banco) para quem chama — tudo fica só no log do
+  servidor.
 
 | Camada    | Sugestão                                  |
 |-----------|---------------------------------------------|
@@ -134,7 +158,8 @@ backend/src/
 | Frontend  | Vercel, Netlify ou GitHub Pages             |
 
 Depois de publicar o backend, atualize a `apiBase` em `frontend/config.js` para
-a URL pública dele.
+a URL pública dele, e configure `ALLOWED_ORIGIN` no ambiente do Render com a
+URL do seu frontend na Vercel.
 
 ## Sobre colaboração no GitHub
 
