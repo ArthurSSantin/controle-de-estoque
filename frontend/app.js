@@ -137,6 +137,16 @@
     return `${Math.floor(diffH / 24)}d atrás`;
   }
 
+  function formatDate(ts) {
+    if (!ts) return '—';
+    return new Date(ts).toLocaleDateString('pt-BR');
+  }
+
+  function formatDateTime(ts) {
+    if (!ts) return '';
+    return new Date(ts).toLocaleString('pt-BR');
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -256,6 +266,10 @@
           <label class="mobile-label">Preço</label>
           ${formatPrice(t.preco) || '—'}
         </div>
+        <div class="col col-date">
+          <label class="mobile-label">Adicionado em</label>
+          <span title="${escapeHtml(formatDateTime(t.addedAt))}">${formatDate(t.addedAt)}</span>
+        </div>
         <div class="col col-actions">
           ${t.novo ? `<button class="icon-btn check-btn" title="Marcar como visto" data-id="${t.id}">✓</button>` : ''}
           <button class="icon-btn edit-btn" title="Editar" data-id="${t.id}">✎</button>
@@ -308,13 +322,20 @@
       return;
     }
 
-    if (sortMode === 'qtd_asc' || sortMode === 'qtd_desc') {
-      const dir = sortMode === 'qtd_asc' ? 1 : -1;
-      list.sort((a, b) => dir * ((Number(a.quantidade) || 0) - (Number(b.quantidade) || 0)));
+    const FLAT_SORTS = {
+      qtd_asc: { label: 'Menor quantidade primeiro', cmp: (a, b) => (Number(a.quantidade) || 0) - (Number(b.quantidade) || 0) },
+      qtd_desc: { label: 'Maior quantidade primeiro', cmp: (a, b) => (Number(b.quantidade) || 0) - (Number(a.quantidade) || 0) },
+      data_desc: { label: 'Mais recentes primeiro', cmp: (a, b) => (b.addedAt || 0) - (a.addedAt || 0) },
+      data_asc: { label: 'Mais antigos primeiro', cmp: (a, b) => (a.addedAt || 0) - (b.addedAt || 0) },
+    };
+
+    if (FLAT_SORTS[sortMode]) {
+      const { label, cmp } = FLAT_SORTS[sortMode];
+      list.sort(cmp);
       contentEl.innerHTML = `
         <div class="group">
           <div class="group-head">
-            <h3>${sortMode === 'qtd_asc' ? 'Menor quantidade primeiro' : 'Maior quantidade primeiro'}</h3>
+            <h3>${label}</h3>
             <span class="group-count">${list.length} ${list.length === 1 ? 'item' : 'itens'}</span>
           </div>
           ${list.map(tireRowHtml).join('')}
