@@ -6,9 +6,7 @@
 <title>Controle de Estoque de Pneus</title>
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="auth.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 </head>
 <body>
 
@@ -79,6 +77,7 @@
       </div>
       <button class="btn btn-secondary" id="xmlBtn">📄 Entrada por XML (NF-e)</button>
       <button class="btn btn-secondary" id="importBtn">📊 Importar planilha/PDF</button>
+      <button class="btn btn-secondary" id="syncBtn">🔄 Sincronizar com a empresa</button>
       <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
     </div>
   </div>
@@ -206,6 +205,36 @@
     <div class="err" id="importErr"></div>
   </div>
 
+  <!-- SINCRONIZAR COM A EMPRESA -->
+  <div class="panel" id="syncPanel">
+    <h2>Sincronizar com o estoque da empresa</h2>
+    <p class="sub">
+      Envie o relatório de estoque mais recente da empresa (PDF ou planilha). Os itens marcados como
+      <b>🏢 empresa</b> têm a quantidade <b>substituída</b> pelo valor do relatório (não somada), e itens
+      da empresa que sumirem do relatório novo são zerados automaticamente — como se tivessem saído de lá.
+      Os pneus que você cadastra por conta própria (fora dessa sincronização) nunca são afetados por essa
+      tela, e continuam somando ao total do seu estoque normalmente.
+    </p>
+
+    <div class="import-upload">
+      <label for="syncFileInput" class="btn btn-primary">📁 Escolher relatório da empresa</label>
+      <input type="file" id="syncFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
+    </div>
+
+    <div id="syncStatus" class="scan-hint" style="display:none;"></div>
+
+    <div id="syncRows"></div>
+
+    <div class="form-actions" style="justify-content:space-between;margin-top:10px;">
+      <button class="btn btn-ghost" id="addSyncRowBtn">+ Adicionar linha</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" id="cancelSyncBtn">Cancelar</button>
+        <button class="btn btn-primary" id="saveSyncBtn">Sincronizar</button>
+      </div>
+    </div>
+    <div class="err" id="syncErr"></div>
+  </div>
+
   <div id="content">
     <div class="loading">Carregando estoque...</div>
   </div>
@@ -216,8 +245,8 @@
 
 </div><!-- /appScreen -->
 
-<script src="config.js"></script>
-<script src="auth.js"></script>
-<script src="app.js"></script>
+<script src="config.js" defer></script>
+<script src="auth.js" defer></script>
+<script src="app.js" defer></script>
 </body>
 </html>
