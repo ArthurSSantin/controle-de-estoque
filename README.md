@@ -41,6 +41,12 @@ do navegador do usuário.
 - **Importar planilha ou PDF**: aceita `.xlsx`/`.xls`/`.csv` (com colunas Marca, Medida, Quantidade, Preço, Condição) ou um PDF de relatório de estoque — o app tenta reconhecer Marca, Medida, Quantidade e Valor de venda automaticamente. Tanto o XML quanto a importação sempre abrem uma tela de revisão antes de salvar, para corrigir qualquer item mal interpretado.
 - **Ordenação**: por aro (R13–R20, padrão) ou por quantidade em estoque (crescente/decrescente) — útil para achar rápido o que está acabando.
 - **Selo de quantidade ímpar**: itens com quantidade ímpar (1, 3, 5...) ganham um selo vermelho "ímpar", já que pneus normalmente são vendidos em pares.
+- **Mesclagem automática de duplicados**: ao adicionar (manualmente, por XML ou por importação) um pneu com a mesma marca, medida e condição de um já cadastrado, a quantidade é somada ao item existente em vez de criar uma linha duplicada.
+- **Sincronização com o estoque da empresa**: para quem também acompanha o estoque de uma empresa (via relatórios em PDF/Excel que ela gera), o botão "🔄 Sincronizar com a empresa" lê o relatório mais recente e reconcilia com o seu estoque assim:
+  - Se um pneu do relatório **já existe** no seu estoque (marca + medida + condição, não importa se foi cadastrado manualmente ou por uma sincronização anterior), a quantidade é **substituída** pela do relatório, e a origem desse item passa a ser **"🏢 empresa"**.
+  - Se um pneu **não aparece mais** no relatório novo *e já estava marcado como origem "empresa"*, ele é **zerado** (saiu do estoque de lá).
+  - Um pneu de origem **"local"** que não bate com nada no relatório **nunca é alterado ou zerado** por essa sincronização — só pneus que o relatório efetivamente menciona são tocados.
+  - Se você **editar manualmente** um pneu que estava marcado como "empresa", a origem dele volta para **"local"** — a partir daí, esse item passa a ser controlado por você, não mais pela próxima sincronização (até que o relatório volte a mencioná-lo, quando ele vira "empresa" de novo).
 
 ## Rodando localmente
 

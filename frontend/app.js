@@ -87,6 +87,7 @@
   const formPanel = document.getElementById('formPanel');
   const xmlPanel = document.getElementById('xmlPanel');
   const importPanel = document.getElementById('importPanel');
+  const syncPanel = document.getElementById('syncPanel');
   const formTitle = document.getElementById('formTitle');
   const formErr = document.getElementById('formErr');
   const toast = document.getElementById('toast');
@@ -151,6 +152,111 @@
     return String(s).replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
+  }
+
+  /* =========================================================================
+     3b. MESCLAGEM DE ITENS DUPLICADOS
+     Um pneu é considerado "o mesmo" quando marca + medida + condição batem
+     (ignorando maiúsculas/espaços). Ao adicionar um item que já existe —
+     manualmente, por XML ou por importação — a quantidade é somada ao item
+     existente em vez de criar uma linha duplicada.
+  ========================================================================= */
+
+  function normalizeForMatch(s) {
+    return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function normalizeMedidaForMatch(s) {
+    return String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  function matchKey(item) {
+    return [
+      normalizeForMatch(item.marca),
+      normalizeMedidaForMatch(item.medida),
+      item.condicao === 'usado' ? 'usado' : 'novo',
+      item.origem === 'empresa' ? 'empresa' : 'local',
+    ].join('|');
+  }
+
+  /**
+   * Igual a matchKey, mas ignora a origem — usada na sincronização com a
+   * empresa, que precisa reconhecer um pneu independentemente de ter sido
+   * cadastrado manualmente ("local") ou vindo de uma sincronização anterior
+   * ("empresa"). A regra de negócio aqui é: o relatório da empresa é a fonte
+   * da verdade para qualquer pneu que ele mencionar, não importa quem
+   * cadastrou primeiro.
+   */
+  function companyMatchKey(item) {
+    return [
+      normalizeForMatch(item.marca),
+      normalizeMedidaForMatch(item.medida),
+      item.condicao === 'usado' ? 'usado' : 'novo',
+    ].join('|');
+  }
+
+  /**
+   * Recebe uma lista de itens novos (1 ou vários), mescla duplicados dentro
+   * do próprio lote, e para cada um decide entre atualizar (somando
+   * quantidade) um item já existente no estoque, ou criar um item novo.
+   */
+  async function commitItems(items, notaRefValue) {
+    // 1) soma duplicados dentro do próprio lote sendo enviado
+    const consolidated = [];
+    const posByKey = {};
+    items.forEach((item) => {
+      const key = matchKey(item);
+      if (posByKey[key] !== undefined) {
+        const target = consolidated[posByKey[key]];
+        target.quantidade += item.quantidade;
+        if (item.preco) target.preco = item.preco;
+      } else {
+        posByKey[key] = consolidated.length;
+        consolidated.push({ ...item });
+      }
+    });
+
+    // 2) compara com o estoque atual: mescla no que já existe, cria o resto
+    const toUpdate = [];
+    const toCreate = [];
+    consolidated.forEach((item) => {
+      const existing = tires.find((t) => matchKey(t) === matchKey(item));
+      if (existing) {
+        toUpdate.push({
+          id: existing.id,
+          payload: {
+            ...existing,
+            quantidade: (Number(existing.quantidade) || 0) + item.quantidade,
+            preco: item.preco || existing.preco,
+            novo: true,
+          },
+        });
+      } else {
+        toCreate.push({ ...item, notaRef: notaRefValue });
+      }
+    });
+
+    // 3) executa
+    const updatedResults = await Promise.all(toUpdate.map((u) => api.update(u.id, u.payload)));
+    updatedResults.forEach((res) => {
+      const t = tires.find((x) => x.id === res.id);
+      if (t) Object.assign(t, res);
+    });
+
+    let createdResults = [];
+    if (toCreate.length > 0) {
+      createdResults = await api.bulkCreate(toCreate);
+      tires.push(...createdResults);
+    }
+
+    return { createdCount: createdResults.length, mergedCount: toUpdate.length };
+  }
+
+  function summarizeCommit(createdCount, mergedCount) {
+    const parts = [];
+    if (createdCount) parts.push(`${createdCount} novo(s)`);
+    if (mergedCount) parts.push(`${mergedCount} somado(s) a itens já existentes`);
+    return parts.length ? parts.join(', ') + '.' : 'Nada para salvar.';
   }
 
   /* =========================================================================
@@ -253,6 +359,7 @@
           <span class="tag-cond ${t.condicao === 'usado' ? 'usado' : 'novo'}">${t.condicao === 'usado' ? 'Usado' : 'Novo'}</span>
           ${t.novo ? `<span class="tag-novo" title="Adicionado ${timeAgo(t.addedAt)}">recente</span>` : ''}
           ${isOdd ? `<span class="tag-impar" title="Quantidade ímpar — sobra um pneu avulso">ímpar</span>` : ''}
+          ${t.origem === 'empresa' ? `<span class="tag-empresa" title="Sincronizado do relatório da empresa">🏢 empresa</span>` : ''}
         </div>
         <div class="col col-size">
           <label class="mobile-label">Medida</label>
@@ -431,6 +538,7 @@
   function openAddForm() {
     closeXmlPanel();
     closeImportPanel();
+    closeSyncPanel();
     editingId = null;
     formTitle.textContent = 'Adicionar pneu';
     fMarca.value = '';
@@ -446,6 +554,7 @@
   function openEditForm(id) {
     closeXmlPanel();
     closeImportPanel();
+    closeSyncPanel();
     const t = tires.find((x) => x.id === id);
     if (!t) return;
     editingId = id;
@@ -492,19 +601,30 @@
     try {
       if (editingId) {
         const t = tires.find((x) => x.id === editingId);
-        const updated = { ...t, marca, medida, quantidade: Number(qtd), preco, condicao };
+        const voltouParaLocal = t.origem === 'empresa';
+        const updated = { ...t, marca, medida, quantidade: Number(qtd), preco, condicao, origem: 'local' };
         await api.update(editingId, updated);
         Object.assign(t, updated);
+        closeForm();
+        render();
+        showToast(
+          voltouParaLocal
+            ? 'Pneu atualizado — agora está marcado como origem local.'
+            : 'Pneu atualizado.'
+        );
       } else {
-        const created = await api.create({
-          marca, medida, quantidade: Number(qtd), preco, condicao,
-          novo: true, notaRef: null,
-        });
-        tires.push(created);
+        const { createdCount, mergedCount } = await commitItems(
+          [{ marca, medida, quantidade: Number(qtd), preco, condicao, novo: true, notaRef: null, origem: 'local' }],
+          null
+        );
+        closeForm();
+        render();
+        showToast(
+          mergedCount
+            ? `Esse pneu já estava no estoque — quantidade somada (+${qtd} un.).`
+            : 'Pneu adicionado ao estoque.'
+        );
       }
-      closeForm();
-      render();
-      showToast(editingId ? 'Pneu atualizado.' : 'Pneu adicionado ao estoque.');
     } catch (e) {
       formErr.textContent = 'Não foi possível salvar. Verifique sua conexão com a API.';
       formErr.classList.add('show');
@@ -544,7 +664,7 @@
     return div;
   }
 
-  function rowsToItems(containerId, errEl, notaRefValue) {
+  function rowsToItems(containerId, errEl, notaRefValue, origem) {
     const rows = document.querySelectorAll(`#${containerId} .batch-row`);
     const items = [];
     for (const row of rows) {
@@ -559,7 +679,10 @@
         errEl.classList.add('show');
         return null;
       }
-      items.push({ marca, medida, quantidade: Number(qtd), preco, condicao, novo: true, notaRef: notaRefValue });
+      items.push({
+        marca, medida, quantidade: Number(qtd), preco, condicao,
+        novo: true, notaRef: notaRefValue, origem: origem === 'empresa' ? 'empresa' : 'local',
+      });
     }
     return items;
   }
@@ -613,6 +736,7 @@
   function openXmlPanel() {
     closeForm();
     closeImportPanel();
+    closeSyncPanel();
     xmlPanel.classList.add('open');
     document.getElementById('xmlStatus').style.display = 'none';
     document.getElementById('xmlResult').style.display = 'none';
@@ -653,7 +777,7 @@
     xmlErr.classList.remove('show');
 
     const notaRefValue = xmlNota && xmlNota.chave ? xmlNota.chave.slice(-8) : 'XML s/ chave';
-    const newItems = rowsToItems('xmlRows', xmlErr, notaRefValue);
+    const newItems = rowsToItems('xmlRows', xmlErr, notaRefValue, 'local');
     if (newItems === null) return;
 
     if (newItems.length === 0) {
@@ -663,11 +787,10 @@
     }
 
     try {
-      const created = await api.bulkCreate(newItems);
-      tires.push(...created);
+      const { createdCount, mergedCount } = await commitItems(newItems, notaRefValue);
       closeXmlPanel();
       render();
-      showToast(`${created.length} item(ns) adicionados a partir do XML.`);
+      showToast(summarizeCommit(createdCount, mergedCount));
     } catch (e) {
       xmlErr.textContent = 'Não foi possível salvar os itens. Verifique sua conexão com a API.';
       xmlErr.classList.add('show');
@@ -676,7 +799,35 @@
 
   /* =========================================================================
      10. IMPORTAÇÃO POR PLANILHA (Excel/CSV) OU PDF DE RELATÓRIO
+     O xlsx e o pdf.js são bibliotecas pesadas usadas só nessa tela — em vez
+     de carregá-las em toda visita ao site, elas só são baixadas na primeira
+     vez que o usuário realmente abre a importação. Isso deixa o carregamento
+     inicial do app bem mais rápido.
   ========================================================================= */
+
+  const scriptLoadCache = {};
+  function loadScriptOnce(src) {
+    if (!scriptLoadCache[src]) {
+      scriptLoadCache[src] = new Promise((resolve, reject) => {
+        const tag = document.createElement('script');
+        tag.src = src;
+        tag.onload = () => resolve();
+        tag.onerror = () => reject(new Error('Não foi possível carregar uma biblioteca externa. Verifique sua conexão.'));
+        document.head.appendChild(tag);
+      });
+    }
+    return scriptLoadCache[src];
+  }
+
+  const XLSX_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+
+  async function ensureXLSX() {
+    if (typeof XLSX === 'undefined') await loadScriptOnce(XLSX_CDN);
+  }
+  async function ensurePdfJs() {
+    if (typeof pdfjsLib === 'undefined') await loadScriptOnce(PDFJS_CDN);
+  }
 
   function normalizeHeader(h) {
     return String(h || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -690,12 +841,9 @@
     condicao: 'condicao', estado: 'condicao',
   };
 
-  function parseSpreadsheet(file) {
+  async function parseSpreadsheet(file) {
+    await ensureXLSX();
     return new Promise((resolve, reject) => {
-      if (typeof XLSX === 'undefined') {
-        reject(new Error('Biblioteca de planilhas não carregou. Verifique sua conexão e recarregue a página.'));
-        return;
-      }
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
@@ -727,9 +875,7 @@
    * sair fora de ordem.
    */
   async function extractPdfLines(file) {
-    if (typeof pdfjsLib === 'undefined') {
-      throw new Error('Biblioteca de leitura de PDF não carregou. Verifique sua conexão e recarregue a página.');
-    }
+    await ensurePdfJs();
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -821,6 +967,7 @@
   function openImportPanel() {
     closeForm();
     closeXmlPanel();
+    closeSyncPanel();
     importPanel.classList.add('open');
     document.getElementById('importRows').innerHTML = '';
     document.getElementById('importErr').classList.remove('show');
@@ -832,11 +979,8 @@
     importPanel.classList.remove('open');
   }
 
-  function downloadTemplate() {
-    if (typeof XLSX === 'undefined') {
-      showToast('Biblioteca de planilhas não carregou. Recarregue a página.');
-      return;
-    }
+  async function downloadTemplate() {
+    await ensureXLSX();
     const ws = XLSX.utils.aoa_to_sheet([
       ['Marca', 'Medida', 'Quantidade', 'Preço', 'Condição'],
       ['Pirelli', '185/65 R14', 4, '350', 'Novo'],
@@ -877,7 +1021,7 @@
     const importErr = document.getElementById('importErr');
     importErr.classList.remove('show');
 
-    const newItems = rowsToItems('importRows', importErr, 'importação');
+    const newItems = rowsToItems('importRows', importErr, 'importação', 'local');
     if (newItems === null) return;
 
     if (newItems.length === 0) {
@@ -887,14 +1031,154 @@
     }
 
     try {
-      const created = await api.bulkCreate(newItems);
-      tires.push(...created);
+      const { createdCount, mergedCount } = await commitItems(newItems, 'importação');
       closeImportPanel();
       render();
-      showToast(`${created.length} item(ns) importados.`);
+      showToast(summarizeCommit(createdCount, mergedCount));
     } catch (e) {
       importErr.textContent = 'Não foi possível salvar os itens. Verifique sua conexão com a API.';
       importErr.classList.add('show');
+    }
+  }
+
+  /* =========================================================================
+     10b. SINCRONIZAÇÃO COM O RELATÓRIO DA EMPRESA
+     Diferente da importação comum (que SOMA quantidade a itens locais), a
+     sincronização SUBSTITUI a quantidade dos itens de origem "empresa" pelo
+     valor do relatório mais recente — e zera os itens de origem "empresa"
+     que não aparecem mais no relatório novo (venderam/saíram de lá).
+     Itens de origem "local" nunca são tocados por essa sincronização.
+  ========================================================================= */
+
+  async function syncCompanyStock(companyItems) {
+    // 1) soma duplicados dentro do próprio relatório
+    const consolidated = [];
+    const posByKey = {};
+    companyItems.forEach((item) => {
+      const key = companyMatchKey(item);
+      if (posByKey[key] !== undefined) {
+        const target = consolidated[posByKey[key]];
+        target.quantidade += item.quantidade;
+        if (item.preco) target.preco = item.preco;
+      } else {
+        posByKey[key] = consolidated.length;
+        consolidated.push({ ...item });
+      }
+    });
+
+    const seenKeys = new Set(consolidated.map(companyMatchKey));
+    const toCreate = [];
+    const toUpdate = [];
+
+    // 2) para cada item do relatório: procura um pneu equivalente no estoque,
+    // seja ele de origem "local" (cadastrado manualmente) ou "empresa" (de uma
+    // sincronização anterior). Se achar, a quantidade é SUBSTITUÍDA pela do
+    // relatório e a origem passa a ser "empresa" — a partir daí, esse item é
+    // rastreado pela empresa. Se não achar, cria um item novo já como "empresa".
+    consolidated.forEach((item) => {
+      const existing = tires.find((t) => companyMatchKey(t) === companyMatchKey(item));
+      if (existing) {
+        toUpdate.push({
+          id: existing.id,
+          payload: {
+            ...existing,
+            quantidade: item.quantidade,
+            preco: item.preco || existing.preco,
+            origem: 'empresa',
+            novo: true,
+          },
+        });
+      } else {
+        toCreate.push({ ...item, origem: 'empresa', notaRef: 'sincronização empresa' });
+      }
+    });
+
+    // 3) itens já rastreados como "empresa" que sumiram do relatório novo são
+    // zerados (saíram do estoque de lá). Itens "local" que nunca bateram com
+    // nenhum relatório continuam de fora dessa lista — nunca são zerados aqui.
+    tires
+      .filter((t) => t.origem === 'empresa' && !seenKeys.has(companyMatchKey(t)))
+      .forEach((t) => {
+        toUpdate.push({ id: t.id, payload: { ...t, quantidade: 0 } });
+      });
+
+    const updatedResults = await Promise.all(toUpdate.map((u) => api.update(u.id, u.payload)));
+    updatedResults.forEach((res) => {
+      const t = tires.find((x) => x.id === res.id);
+      if (t) Object.assign(t, res);
+    });
+
+    let createdResults = [];
+    if (toCreate.length > 0) {
+      createdResults = await api.bulkCreate(toCreate);
+      tires.push(...createdResults);
+    }
+
+    return { createdCount: createdResults.length, updatedCount: toUpdate.length };
+  }
+
+  function openSyncPanel() {
+    closeForm();
+    closeXmlPanel();
+    closeImportPanel();
+    syncPanel.classList.add('open');
+    document.getElementById('syncRows').innerHTML = '';
+    document.getElementById('syncErr').classList.remove('show');
+    document.getElementById('syncStatus').style.display = 'none';
+    document.getElementById('syncFileInput').value = '';
+  }
+
+  function closeSyncPanel() {
+    syncPanel.classList.remove('open');
+  }
+
+  async function handleSyncUpload(file) {
+    const statusEl = document.getElementById('syncStatus');
+    const syncErr = document.getElementById('syncErr');
+    syncErr.classList.remove('show');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Lendo o relatório...';
+
+    try {
+      const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+      const rows = isPdf ? await parsePdfReport(file) : (await parseSpreadsheet(file)).map(mapSpreadsheetRow);
+
+      if (rows.length === 0) {
+        statusEl.textContent = 'Nenhuma linha reconhecida nesse arquivo.';
+        return;
+      }
+
+      document.getElementById('syncRows').innerHTML = '';
+      batchRowCount = 0;
+      rows.forEach((row) => addBatchRow('syncRows', row));
+      statusEl.style.display = 'none';
+      showToast(`${rows.length} linha(s) lidas do relatório da empresa. Confira antes de sincronizar.`);
+    } catch (err) {
+      statusEl.textContent = err.message || 'Não foi possível ler esse arquivo.';
+    }
+  }
+
+  async function saveSync() {
+    const syncErr = document.getElementById('syncErr');
+    syncErr.classList.remove('show');
+
+    const items = rowsToItems('syncRows', syncErr, null, 'empresa');
+    if (items === null) return;
+
+    if (items.length === 0) {
+      syncErr.textContent = 'Nenhum item para sincronizar.';
+      syncErr.classList.add('show');
+      return;
+    }
+
+    try {
+      const { createdCount, updatedCount } = await syncCompanyStock(items);
+      closeSyncPanel();
+      render();
+      showToast(`Estoque da empresa sincronizado: ${createdCount} novo(s), ${updatedCount} atualizado(s).`);
+    } catch (e) {
+      syncErr.textContent = 'Não foi possível sincronizar. Verifique sua conexão com a API.';
+      syncErr.classList.add('show');
     }
   }
 
@@ -931,6 +1215,17 @@
   document.getElementById('addImportRowBtn').onclick = () => addBatchRow('importRows');
   document.getElementById('cancelImportBtn').onclick = closeImportPanel;
   document.getElementById('saveImportBtn').onclick = saveImport;
+
+  document.getElementById('syncBtn').onclick = () => {
+    syncPanel.classList.contains('open') ? closeSyncPanel() : openSyncPanel();
+  };
+  document.getElementById('syncFileInput').onchange = (e) => {
+    const file = e.target.files[0];
+    if (file) handleSyncUpload(file);
+  };
+  document.getElementById('addSyncRowBtn').onclick = () => addBatchRow('syncRows');
+  document.getElementById('cancelSyncBtn').onclick = closeSyncPanel;
+  document.getElementById('saveSyncBtn').onclick = saveSync;
 
   document.getElementById('searchInput').oninput = (e) => {
     searchTerm = e.target.value;

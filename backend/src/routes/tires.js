@@ -44,6 +44,7 @@ function validateTirePayload(body) {
       condicao,
       novo: body.novo !== undefined ? Boolean(body.novo) : true,
       nota_ref: body.notaRef ? String(body.notaRef).trim().slice(0, MAX_TEXT_LEN) : null,
+      origem: body.origem === 'empresa' ? 'empresa' : 'local',
     },
   };
 }
@@ -62,6 +63,7 @@ function toApi(row) {
     condicao: row.condicao,
     novo: row.novo,
     notaRef: row.nota_ref,
+    origem: row.origem || 'local',
     addedAt: row.created_at ? new Date(row.created_at).getTime() : null,
   };
 }
