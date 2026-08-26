@@ -18,8 +18,14 @@ create table if not exists tires (
   condicao     text not null default 'novo' check (condicao in ('novo', 'usado')),
   novo         boolean not null default true,   -- tag "recém-adicionado" (some ao marcar como visto)
   nota_ref     text,                      -- referência da nota fiscal, quando entrada via scanner
+  origem       text not null default 'local' check (origem in ('empresa', 'local')),
   created_at   timestamptz not null default now()
 );
+
+-- Se a tabela já existia sem a coluna origem, estas linhas adicionam:
+alter table tires add column if not exists origem text not null default 'local';
+alter table tires drop constraint if exists tires_origem_check;
+alter table tires add constraint tires_origem_check check (origem in ('empresa', 'local'));
 
 -- Se a tabela já existia sem a coluna owner_id, esta linha adiciona:
 alter table tires add column if not exists owner_id uuid references auth.users(id);
