@@ -78,6 +78,7 @@
       <button class="btn btn-secondary" id="xmlBtn">📄 Entrada por XML (NF-e)</button>
       <button class="btn btn-secondary" id="importBtn">📊 Importar planilha/PDF</button>
       <button class="btn btn-secondary" id="syncBtn">🔄 Sincronizar com a empresa</button>
+      <button class="btn btn-secondary" id="historyBtn">📜 Histórico</button>
       <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
     </div>
   </div>
@@ -233,6 +234,17 @@
       </div>
     </div>
     <div class="err" id="syncErr"></div>
+  </div>
+
+  <!-- HISTÓRICO -->
+  <div class="panel" id="historyPanel">
+    <h2>Histórico de movimentações</h2>
+    <p class="sub">
+      Entradas e saídas de quantidade, criações, exclusões e edições de marca/medida/preço —
+      mais recente primeiro.
+    </p>
+    <div id="historyStatus" class="scan-hint" style="display:none;"></div>
+    <div id="historyList"></div>
   </div>
 
   <div id="content">

@@ -281,6 +281,38 @@
     color:var(--ink-soft);
     margin-bottom:14px;
   }
+
+  /* HISTÓRICO */
+  #historyList{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    max-height:520px;
+    overflow-y:auto;
+  }
+  .history-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#fff;
+    font-size:13px;
+    flex-wrap:wrap;
+  }
+  .history-acao{
+    font-weight:700;
+    white-space:nowrap;
+    font-size:12.5px;
+  }
+  .history-text{flex:1;min-width:200px;color:var(--ink);}
+  .history-date{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    white-space:nowrap;
+    font-family:'IBM Plex Mono',monospace;
+  }
   .import-upload{
     display:flex;
     align-items:center;

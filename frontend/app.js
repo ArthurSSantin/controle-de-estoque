@@ -58,6 +58,13 @@
       });
       if (!res.ok) throw new Error('Falha ao excluir item');
     },
+    async history(limit) {
+      const res = await fetch(`${API_BASE}/history${limit ? `?limit=${limit}` : ''}`, {
+        headers: await authHeaders(),
+      });
+      if (!res.ok) throw new Error('Falha ao carregar o histórico');
+      return res.json();
+    },
   };
 
   async function safeErr(res) {
@@ -88,6 +95,7 @@
   const xmlPanel = document.getElementById('xmlPanel');
   const importPanel = document.getElementById('importPanel');
   const syncPanel = document.getElementById('syncPanel');
+  const historyPanel = document.getElementById('historyPanel');
   const formTitle = document.getElementById('formTitle');
   const formErr = document.getElementById('formErr');
   const toast = document.getElementById('toast');
@@ -618,6 +626,7 @@
     closeXmlPanel();
     closeImportPanel();
     closeSyncPanel();
+    closeHistoryPanel();
     editingId = null;
     formTitle.textContent = 'Adicionar pneu';
     fMarca.value = '';
@@ -634,6 +643,7 @@
     closeXmlPanel();
     closeImportPanel();
     closeSyncPanel();
+    closeHistoryPanel();
     const t = tires.find((x) => x.id === id);
     if (!t) return;
     editingId = id;
@@ -818,6 +828,7 @@
     closeForm();
     closeImportPanel();
     closeSyncPanel();
+    closeHistoryPanel();
     xmlPanel.classList.add('open');
     document.getElementById('xmlStatus').style.display = 'none';
     document.getElementById('xmlResult').style.display = 'none';
@@ -1049,6 +1060,7 @@
     closeForm();
     closeXmlPanel();
     closeSyncPanel();
+    closeHistoryPanel();
     importPanel.classList.add('open');
     document.getElementById('importRows').innerHTML = '';
     document.getElementById('importErr').classList.remove('show');
@@ -1207,6 +1219,7 @@
     closeForm();
     closeXmlPanel();
     closeImportPanel();
+    closeHistoryPanel();
     syncPanel.classList.add('open');
     document.getElementById('syncRows').innerHTML = '';
     document.getElementById('syncErr').classList.remove('show');
@@ -1216,6 +1229,88 @@
 
   function closeSyncPanel() {
     syncPanel.classList.remove('open');
+  }
+
+  /* =========================================================================
+     10c. HISTÓRICO DE MOVIMENTAÇÕES
+  ========================================================================= */
+
+  const HISTORY_ACAO_LABEL = {
+    criado: '🆕 Criado',
+    editado: '✏️ Editado',
+    excluido: '🗑️ Excluído',
+    entrada: '⬆️ Entrada',
+    saida: '⬇️ Saída',
+  };
+
+  const HISTORY_CAMPO_LABEL = {
+    marca: 'marca',
+    medida: 'medida',
+    preco: 'preço',
+    quantidade: 'quantidade',
+  };
+
+  function historyEntryText(h) {
+    const item = `${h.marca} ${h.medida}`;
+    switch (h.acao) {
+      case 'criado':
+        return `${item} — adicionado ao estoque (${h.valorNovo ?? '?'} un.)`;
+      case 'excluido':
+        return `${item} — removido do estoque (tinha ${h.valorAnterior ?? '?'} un.)`;
+      case 'entrada':
+        return `${item} — quantidade subiu de ${h.valorAnterior} para ${h.valorNovo} un.`;
+      case 'saida':
+        return `${item} — quantidade caiu de ${h.valorAnterior} para ${h.valorNovo} un.`;
+      case 'editado': {
+        const campo = HISTORY_CAMPO_LABEL[h.campo] || h.campo;
+        const de = h.campo === 'preco' ? formatPrice(h.valorAnterior) || '—' : (h.valorAnterior || '—');
+        const para = h.campo === 'preco' ? formatPrice(h.valorNovo) || '—' : (h.valorNovo || '—');
+        return `${item} — ${campo} alterado de "${de}" para "${para}"`;
+      }
+      default:
+        return item;
+    }
+  }
+
+  async function openHistoryPanel() {
+    closeForm();
+    closeXmlPanel();
+    closeImportPanel();
+    closeSyncPanel();
+    historyPanel.classList.add('open');
+    await loadAndRenderHistory();
+  }
+
+  function closeHistoryPanel() {
+    historyPanel.classList.remove('open');
+  }
+
+  async function loadAndRenderHistory() {
+    const statusEl = document.getElementById('historyStatus');
+    const listEl = document.getElementById('historyList');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Carregando histórico...';
+    listEl.innerHTML = '';
+
+    try {
+      const entries = await api.history();
+      statusEl.style.display = 'none';
+
+      if (!entries.length) {
+        listEl.innerHTML = '<p class="sub">Nenhuma movimentação registrada ainda.</p>';
+        return;
+      }
+
+      listEl.innerHTML = entries.map((h) => `
+        <div class="history-row">
+          <span class="history-acao">${HISTORY_ACAO_LABEL[h.acao] || h.acao}</span>
+          <span class="history-text">${escapeHtml(historyEntryText(h))}</span>
+          <span class="history-date">${formatDateTime(h.createdAt)}</span>
+        </div>
+      `).join('');
+    } catch (e) {
+      statusEl.textContent = 'Não foi possível carregar o histórico. Verifique sua conexão com a API.';
+    }
   }
 
   async function handleSyncUpload(file) {
@@ -1315,6 +1410,10 @@
   document.getElementById('addSyncRowBtn').onclick = () => addBatchRow('syncRows');
   document.getElementById('cancelSyncBtn').onclick = closeSyncPanel;
   document.getElementById('saveSyncBtn').onclick = saveSync;
+
+  document.getElementById('historyBtn').onclick = () => {
+    historyPanel.classList.contains('open') ? closeHistoryPanel() : openHistoryPanel();
+  };
 
   document.getElementById('searchInput').oninput = (e) => {
     searchTerm = e.target.value;
