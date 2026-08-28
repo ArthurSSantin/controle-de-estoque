@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import tiresRouter from './routes/tires.js';
+import historyRouter from './routes/history.js';
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/tires', tiresRouter);
+app.use('/api/history', historyRouter);
 
 // Handler de erro genérico — evita vazar detalhes internos (stack trace, etc.)
 // para quem está chamando a API.
