@@ -19,8 +19,19 @@ create table if not exists tires (
   novo         boolean not null default true,   -- tag "recém-adicionado" (some ao marcar como visto)
   nota_ref     text,                      -- referência da nota fiscal, quando entrada via scanner
   origem       text not null default 'local' check (origem in ('empresa', 'local')),
+  fornecedor   text,                      -- opcional, nome do fornecedor
+  codigo_barras text,                     -- opcional, código de barras da etiqueta física (por modelo)
   created_at   timestamptz not null default now()
 );
+
+-- Se a tabela já existia sem a coluna fornecedor, esta linha adiciona:
+alter table tires add column if not exists fornecedor text;
+
+-- Se a tabela já existia sem a coluna codigo_barras, estas linhas adicionam:
+alter table tires add column if not exists codigo_barras text;
+create unique index if not exists idx_tires_owner_codigo_barras
+  on tires (owner_id, codigo_barras)
+  where codigo_barras is not null;
 
 -- Se a tabela já existia sem a coluna origem, estas linhas adicionam:
 alter table tires add column if not exists origem text not null default 'local';

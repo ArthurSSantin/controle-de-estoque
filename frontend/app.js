@@ -19,8 +19,12 @@
   }
 
   const api = {
-    async list() {
-      const res = await fetch(`${API_BASE}/tires`, { headers: await authHeaders() });
+    async list(offset, limit) {
+      const params = new URLSearchParams();
+      if (offset) params.set('offset', offset);
+      if (limit) params.set('limit', limit);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE}/tires${qs ? `?${qs}` : ''}`, { headers: await authHeaders() });
       if (!res.ok) throw new Error('Falha ao carregar o estoque');
       return res.json();
     },
@@ -58,8 +62,14 @@
       });
       if (!res.ok) throw new Error('Falha ao excluir item');
     },
-    async history(limit) {
-      const res = await fetch(`${API_BASE}/history${limit ? `?limit=${limit}` : ''}`, {
+    async history(limit, filters) {
+      const params = new URLSearchParams();
+      if (limit) params.set('limit', limit);
+      if (filters && filters.tireId) params.set('tireId', filters.tireId);
+      if (filters && filters.from) params.set('from', filters.from);
+      if (filters && filters.to) params.set('to', filters.to);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE}/history${qs ? `?${qs}` : ''}`, {
         headers: await authHeaders(),
       });
       if (!res.ok) throw new Error('Falha ao carregar o histórico');
@@ -89,35 +99,93 @@
   let xmlNota = null; // { chave }
   let batchRowCount = 0;
 
+  // Paginação (ver seção 5)
+  const TIRES_PAGE_SIZE = 200;
+  let tiresOffset = 0;
+  let tiresTotal = 0;
+
+  // Cache offline (ver seção 5b)
+  const OFFLINE_CACHE_KEY = 'estoque_pneus_cache_v1';
+
   const contentEl = document.getElementById('content');
   const statsEl = document.getElementById('stats');
   const formPanel = document.getElementById('formPanel');
   const xmlPanel = document.getElementById('xmlPanel');
   const importPanel = document.getElementById('importPanel');
   const syncPanel = document.getElementById('syncPanel');
-  const historyPanel = document.getElementById('historyPanel');
+  const conferPanel = document.getElementById('conferPanel');
   const formTitle = document.getElementById('formTitle');
   const formErr = document.getElementById('formErr');
   const toast = document.getElementById('toast');
   const novoChip = document.getElementById('novoChip');
   const novoCount = document.getElementById('novoCount');
   const sortModeSelect = document.getElementById('sortModeSelect');
+  const paginationBar = document.getElementById('paginationBar');
+  const paginationInfo = document.getElementById('paginationInfo');
+
+  /* =========================================================================
+     1b. NAVEGAÇÃO POR ABAS (Estoque / Histórico / Dashboard / Exportar)
+  ========================================================================= */
+
+  const TAB_PANELS = {
+    estoque: document.getElementById('tabEstoque'),
+    historico: document.getElementById('tabHistorico'),
+    dashboard: document.getElementById('tabDashboard'),
+    exportar: document.getElementById('tabExportar'),
+  };
+  let activeTab = 'estoque';
+
+  function switchTab(name) {
+    if (!TAB_PANELS[name]) return;
+    activeTab = name;
+
+    Object.entries(TAB_PANELS).forEach(([key, el]) => {
+      el.hidden = key !== name;
+    });
+    document.querySelectorAll('.tabbar .tab').forEach((btn) => {
+      const isActive = btn.dataset.tab === name;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', String(isActive));
+    });
+
+    if (name === 'historico') {
+      populateHistoryTireFilter();
+      loadAndRenderHistory();
+    } else if (name === 'dashboard') {
+      loadAndRenderDashboard();
+    } else if (name === 'exportar') {
+      renderExportPreview();
+    }
+  }
 
   const fMarca = document.getElementById('fMarca');
   const fMedida = document.getElementById('fMedida');
   const fQtd = document.getElementById('fQtd');
   const fPreco = document.getElementById('fPreco');
   const fCondicao = document.getElementById('fCondicao');
+  const fFornecedor = document.getElementById('fFornecedor');
+  const fCodigoBarras = document.getElementById('fCodigoBarras');
 
   /* =========================================================================
      3. UTILITÁRIOS GERAIS
   ========================================================================= */
 
-  function showToast(msg) {
+  function showToast(msg, opts) {
+    opts = opts || {};
     toast.textContent = msg;
+    if (opts.actionLabel && opts.onAction) {
+      const btn = document.createElement('button');
+      btn.className = 'undo-btn';
+      btn.textContent = opts.actionLabel;
+      btn.onclick = () => {
+        opts.onAction();
+        toast.classList.remove('show');
+      };
+      toast.appendChild(btn);
+    }
     toast.classList.add('show');
     clearTimeout(showToast._t);
-    showToast._t = setTimeout(() => toast.classList.remove('show'), 2600);
+    showToast._t = setTimeout(() => toast.classList.remove('show'), opts.duration || 2600);
   }
 
   function parseAro(medida) {
@@ -380,12 +448,52 @@
      5. CARREGAMENTO E RENDERIZAÇÃO
   ========================================================================= */
 
-  async function load() {
+  // Cache offline: guarda a última lista carregada com sucesso no navegador,
+  // pra continuar mostrando algo (modo leitura) se a API cair.
+  function saveOfflineCache() {
     try {
-      tires = await api.list();
+      localStorage.setItem(OFFLINE_CACHE_KEY, JSON.stringify({ tires, savedAt: Date.now() }));
     } catch (e) {
-      tires = [];
-      showToast('Não foi possível conectar à API. Verifique se o backend está rodando.');
+      // localStorage indisponível (modo privado, cota cheia) — não é crítico.
+    }
+  }
+
+  function loadOfflineCache() {
+    try {
+      const raw = localStorage.getItem(OFFLINE_CACHE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function updatePaginationBar() {
+    const hasMore = tires.length < tiresTotal;
+    paginationBar.style.display = tiresTotal > 0 ? 'flex' : 'none';
+    paginationInfo.textContent = `${tires.length} de ${tiresTotal} itens carregados`;
+    document.getElementById('loadMoreBtn').style.display = hasMore ? 'inline-flex' : 'none';
+  }
+
+  async function load() {
+    tiresOffset = 0;
+    try {
+      const page = await api.list(0, TIRES_PAGE_SIZE);
+      tires = page.items;
+      tiresTotal = page.total;
+      tiresOffset = page.items.length;
+      saveOfflineCache();
+    } catch (e) {
+      const cached = loadOfflineCache();
+      if (cached) {
+        tires = cached.tires;
+        tiresTotal = tires.length;
+        tiresOffset = tires.length;
+        showToast(`Sem conexão com a API — mostrando dados salvos localmente (${timeAgo(cached.savedAt)}).`);
+      } else {
+        tires = [];
+        tiresTotal = 0;
+        showToast('Não foi possível conectar à API. Verifique se o backend está rodando.');
+      }
       render();
       return;
     }
@@ -400,6 +508,19 @@
     }
 
     render();
+  }
+
+  async function loadMore() {
+    try {
+      const page = await api.list(tiresOffset, TIRES_PAGE_SIZE);
+      tires.push(...page.items);
+      tiresTotal = page.total;
+      tiresOffset += page.items.length;
+      saveOfflineCache();
+      render();
+    } catch (e) {
+      showToast('Não foi possível carregar mais itens. Tente novamente.');
+    }
   }
 
   function renderStats() {
@@ -447,6 +568,7 @@
           ${t.novo ? `<span class="tag-novo" title="Adicionado ${timeAgo(t.addedAt)}">recente</span>` : ''}
           ${isOdd ? `<span class="tag-impar" title="Quantidade ímpar — sobra um pneu avulso">ímpar</span>` : ''}
           ${t.origem === 'empresa' ? `<span class="tag-empresa" title="Sincronizado do relatório da empresa">🏢 empresa</span>` : ''}
+          ${t.fornecedor ? `<span class="tag-fornecedor" title="Fornecedor">${escapeHtml(t.fornecedor)}</span>` : ''}
         </div>
         <div class="col col-size">
           <label class="mobile-label">Medida</label>
@@ -486,6 +608,8 @@
 
   function render() {
     renderStats();
+    updatePaginationBar();
+    saveOfflineCache();
 
     let list = applyFilters(tires.slice());
 
@@ -607,26 +731,56 @@
     }, 3000);
   }
 
-  async function deleteTire(id) {
-    try {
-      await api.remove(id);
-      tires = tires.filter((t) => t.id !== id);
-      render();
-      showToast('Pneu removido do estoque.');
-    } catch (e) {
-      showToast('Não foi possível excluir. Tente novamente.');
-    }
+  // Exclusão com "desfazer": some da tela na hora, mas só chama a API depois
+  // de UNDO_DELAY_MS — se o usuário clicar em "Desfazer" antes disso, cancela
+  // e o item volta pro lugar.
+  const UNDO_DELAY_MS = 5000;
+  const pendingDeletes = {}; // id -> { tire, timer }
+
+  function deleteTire(id) {
+    const idx = tires.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    const [tire] = tires.splice(idx, 1);
+    render();
+
+    const timer = setTimeout(async () => {
+      delete pendingDeletes[id];
+      try {
+        await api.remove(id);
+      } catch (e) {
+        tires.push(tire);
+        render();
+        showToast('Não foi possível excluir. Tente novamente.');
+      }
+    }, UNDO_DELAY_MS);
+
+    pendingDeletes[id] = { tire, idx };
+    showToast('Pneu removido do estoque.', {
+      actionLabel: 'Desfazer',
+      duration: UNDO_DELAY_MS,
+      onAction: () => {
+        const pending = pendingDeletes[id];
+        if (!pending) return;
+        clearTimeout(timer);
+        delete pendingDeletes[id];
+        tires.splice(Math.min(pending.idx, tires.length), 0, pending.tire);
+        render();
+        showToast('Exclusão desfeita.');
+      },
+    });
   }
 
   /* =========================================================================
      7. FORMULÁRIO MANUAL (adicionar / editar um item)
   ========================================================================= */
 
-  function openAddForm() {
+  function openAddForm(prefillCodigoBarras) {
+    switchTab('estoque');
     closeXmlPanel();
     closeImportPanel();
     closeSyncPanel();
-    closeHistoryPanel();
+    closeConferPanel();
+    closeScanOnceModal();
     editingId = null;
     formTitle.textContent = 'Adicionar pneu';
     fMarca.value = '';
@@ -634,16 +788,20 @@
     fQtd.value = '';
     fPreco.value = '';
     fCondicao.value = 'novo';
+    fFornecedor.value = '';
+    fCodigoBarras.value = prefillCodigoBarras || '';
     formErr.classList.remove('show');
     formPanel.classList.add('open');
     fMarca.focus();
   }
 
   function openEditForm(id) {
+    switchTab('estoque');
     closeXmlPanel();
     closeImportPanel();
     closeSyncPanel();
-    closeHistoryPanel();
+    closeConferPanel();
+    closeScanOnceModal();
     const t = tires.find((x) => x.id === id);
     if (!t) return;
     editingId = id;
@@ -653,6 +811,8 @@
     fQtd.value = t.quantidade ?? '';
     fPreco.value = t.preco ?? '';
     fCondicao.value = t.condicao === 'usado' ? 'usado' : 'novo';
+    fFornecedor.value = t.fornecedor ?? '';
+    fCodigoBarras.value = t.codigoBarras ?? '';
     formErr.classList.remove('show');
     formPanel.classList.add('open');
     fMarca.focus();
@@ -670,6 +830,8 @@
     const qtd = fQtd.value.trim();
     const preco = fPreco.value.trim();
     const condicao = fCondicao.value;
+    const fornecedor = fFornecedor.value.trim();
+    const codigoBarras = fCodigoBarras.value.trim();
 
     if (!marca || !medida || qtd === '') {
       formErr.textContent = 'Preencha marca, medida e quantidade.';
@@ -691,7 +853,7 @@
       if (editingId) {
         const t = tires.find((x) => x.id === editingId);
         const voltouParaLocal = t.origem === 'empresa';
-        const updated = { ...t, marca, medida, quantidade: Number(qtd), preco, condicao, origem: 'local' };
+        const updated = { ...t, marca, medida, quantidade: Number(qtd), preco, condicao, fornecedor: fornecedor || null, codigoBarras: codigoBarras || null, origem: 'local' };
         await api.update(editingId, updated);
         Object.assign(t, updated);
         closeForm();
@@ -703,7 +865,7 @@
         );
       } else {
         const { mergedCount, dedupedCount } = await commitItems(
-          [{ marca, medida, quantidade: Number(qtd), preco, condicao, novo: true, notaRef: null, origem: 'local' }],
+          [{ marca, medida, quantidade: Number(qtd), preco, condicao, fornecedor: fornecedor || null, codigoBarras: codigoBarras || null, novo: true, notaRef: null, origem: 'local' }],
           null
         );
         closeForm();
@@ -717,7 +879,7 @@
         );
       }
     } catch (e) {
-      formErr.textContent = 'Não foi possível salvar. Verifique sua conexão com a API.';
+      formErr.textContent = e.message || 'Não foi possível salvar. Verifique sua conexão com a API.';
       formErr.classList.add('show');
     }
   }
@@ -743,6 +905,7 @@
           <option value="usado">Usado</option>
         </select>
       </div>
+      <div class="field"><label>Fornecedor</label><input type="text" class="b-fornecedor" placeholder="Opcional"></div>
       <button class="rm" title="Remover linha">✕</button>
     `;
     if (prefill.marca) div.querySelector('.b-marca').value = prefill.marca;
@@ -750,6 +913,7 @@
     if (prefill.quantidade !== undefined && prefill.quantidade !== '') div.querySelector('.b-qtd').value = prefill.quantidade;
     if (prefill.preco) div.querySelector('.b-preco').value = prefill.preco;
     if (prefill.condicao === 'usado') div.querySelector('.b-condicao').value = 'usado';
+    if (prefill.fornecedor) div.querySelector('.b-fornecedor').value = prefill.fornecedor;
     div.querySelector('.rm').onclick = () => div.remove();
     document.getElementById(containerId).appendChild(div);
     return div;
@@ -764,6 +928,7 @@
       const qtd = row.querySelector('.b-qtd').value.trim();
       const preco = row.querySelector('.b-preco').value.trim();
       const condicao = row.querySelector('.b-condicao').value;
+      const fornecedor = row.querySelector('.b-fornecedor').value.trim();
       if (!marca && !medida && !qtd) continue; // linha vazia, ignora
       if (!marca || !medida || qtd === '' || !validMedida(medida)) {
         errEl.textContent = 'Verifique se todas as linhas têm marca, medida válida (R13–R20) e quantidade.';
@@ -771,7 +936,7 @@
         return null;
       }
       items.push({
-        marca, medida, quantidade: Number(qtd), preco, condicao,
+        marca, medida, quantidade: Number(qtd), preco, condicao, fornecedor: fornecedor || null,
         novo: true, notaRef: notaRefValue, origem: origem === 'empresa' ? 'empresa' : 'local',
       });
     }
@@ -825,10 +990,12 @@
   }
 
   function openXmlPanel() {
+    switchTab('estoque');
     closeForm();
     closeImportPanel();
     closeSyncPanel();
-    closeHistoryPanel();
+    closeConferPanel();
+    closeScanOnceModal();
     xmlPanel.classList.add('open');
     document.getElementById('xmlStatus').style.display = 'none';
     document.getElementById('xmlResult').style.display = 'none';
@@ -1057,10 +1224,12 @@
   }
 
   function openImportPanel() {
+    switchTab('estoque');
     closeForm();
     closeXmlPanel();
     closeSyncPanel();
-    closeHistoryPanel();
+    closeConferPanel();
+    closeScanOnceModal();
     importPanel.classList.add('open');
     document.getElementById('importRows').innerHTML = '';
     document.getElementById('importErr').classList.remove('show');
@@ -1216,10 +1385,12 @@
   }
 
   function openSyncPanel() {
+    switchTab('estoque');
     closeForm();
     closeXmlPanel();
     closeImportPanel();
-    closeHistoryPanel();
+    closeConferPanel();
+    closeScanOnceModal();
     syncPanel.classList.add('open');
     document.getElementById('syncRows').innerHTML = '';
     document.getElementById('syncErr').classList.remove('show');
@@ -1272,17 +1443,16 @@
     }
   }
 
-  async function openHistoryPanel() {
-    closeForm();
-    closeXmlPanel();
-    closeImportPanel();
-    closeSyncPanel();
-    historyPanel.classList.add('open');
-    await loadAndRenderHistory();
-  }
-
-  function closeHistoryPanel() {
-    historyPanel.classList.remove('open');
+  function populateHistoryTireFilter() {
+    const sel = document.getElementById('historyTireFilter');
+    const current = sel.value;
+    const options = tires
+      .slice()
+      .sort((a, b) => (a.marca || '').localeCompare(b.marca || '', 'pt-BR'))
+      .map((t) => `<option value="${t.id}">${escapeHtml(t.marca)} ${escapeHtml(t.medida)}</option>`)
+      .join('');
+    sel.innerHTML = '<option value="">Todos os pneus</option>' + options;
+    sel.value = current;
   }
 
   async function loadAndRenderHistory() {
@@ -1292,12 +1462,18 @@
     statusEl.textContent = 'Carregando histórico...';
     listEl.innerHTML = '';
 
+    const filters = {
+      tireId: document.getElementById('historyTireFilter').value || null,
+      from: document.getElementById('historyFromFilter').value || null,
+      to: document.getElementById('historyToFilter').value || null,
+    };
+
     try {
-      const entries = await api.history();
+      const entries = await api.history(null, filters);
       statusEl.style.display = 'none';
 
       if (!entries.length) {
-        listEl.innerHTML = '<p class="sub">Nenhuma movimentação registrada ainda.</p>';
+        listEl.innerHTML = '<p class="sub">Nenhuma movimentação encontrada para esse filtro.</p>';
         return;
       }
 
@@ -1311,6 +1487,407 @@
     } catch (e) {
       statusEl.textContent = 'Não foi possível carregar o histórico. Verifique sua conexão com a API.';
     }
+  }
+
+  /* =========================================================================
+     10d. DASHBOARD DE MOVIMENTAÇÕES
+     Gráfico simples de barras (sem biblioteca) com entradas x saídas por dia,
+     lidos do histórico dos últimos 14 dias.
+  ========================================================================= */
+
+  const DASHBOARD_DAYS = 14;
+
+  function dateKey(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  async function loadAndRenderDashboard() {
+    const statusEl = document.getElementById('dashboardStatus');
+    const chartEl = document.getElementById('dashboardChart');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Carregando movimentações...';
+    chartEl.innerHTML = '';
+
+    const today = new Date();
+    const from = new Date(today);
+    from.setDate(from.getDate() - (DASHBOARD_DAYS - 1));
+
+    try {
+      const entries = await api.history(2000, { from: dateKey(from) });
+      statusEl.style.display = 'none';
+
+      const byDay = {};
+      for (let i = 0; i < DASHBOARD_DAYS; i++) {
+        const d = new Date(from);
+        d.setDate(d.getDate() + i);
+        byDay[dateKey(d)] = { entrada: 0, saida: 0 };
+      }
+
+      entries.forEach((h) => {
+        if (h.acao !== 'entrada' && h.acao !== 'saida') return;
+        const key = dateKey(new Date(h.createdAt));
+        if (!byDay[key]) return;
+        const delta = Math.abs(Number(h.valorNovo) - Number(h.valorAnterior)) || 0;
+        byDay[key][h.acao] += delta;
+      });
+
+      const days = Object.keys(byDay).sort();
+      const maxVal = Math.max(1, ...days.map((k) => Math.max(byDay[k].entrada, byDay[k].saida)));
+
+      chartEl.innerHTML = days.map((k) => {
+        const { entrada, saida } = byDay[k];
+        const label = new Date(k + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        return `
+          <div class="dash-bar-wrap" title="${label}: ${entrada} entrada(s), ${saida} saída(s)">
+            <div class="dash-bars">
+              <div class="dash-bar entrada" style="height:${(entrada / maxVal) * 100}%"></div>
+              <div class="dash-bar saida" style="height:${(saida / maxVal) * 100}%"></div>
+            </div>
+            <span class="dash-bar-label">${label}</span>
+          </div>`;
+      }).join('') + `
+        <style>#dashboardChart{align-items:flex-end;}</style>
+      `;
+
+      if (!document.getElementById('dashLegend')) {
+        const legend = document.createElement('div');
+        legend.id = 'dashLegend';
+        legend.className = 'dash-legend';
+        legend.innerHTML = `
+          <span><i style="background:var(--green)"></i> Entradas</span>
+          <span><i style="background:var(--rust)"></i> Saídas</span>
+        `;
+        chartEl.after(legend);
+      }
+    } catch (e) {
+      statusEl.textContent = 'Não foi possível carregar o dashboard. Verifique sua conexão com a API.';
+    }
+  }
+
+  /* =========================================================================
+     10f. EXPORTAR ESTOQUE (Excel) — aba "Exportar" com pré-visualização
+  ========================================================================= */
+
+  function buildExportRows() {
+    return tires.map((t) => ({
+      Marca: t.marca,
+      Medida: t.medida,
+      Quantidade: t.quantidade,
+      Preço: t.preco || '',
+      Condição: t.condicao === 'usado' ? 'Usado' : 'Novo',
+      Fornecedor: t.fornecedor || '',
+      Origem: t.origem === 'empresa' ? 'Empresa' : 'Local',
+      'Adicionado em': formatDate(t.addedAt),
+    }));
+  }
+
+  function renderExportPreview() {
+    const rows = buildExportRows();
+    document.getElementById('exportSummary').textContent =
+      rows.length === 1 ? '1 item será exportado' : `${rows.length} itens serão exportados`;
+
+    const table = document.getElementById('exportPreviewTable');
+    if (!rows.length) {
+      table.innerHTML = '';
+      return;
+    }
+    const columns = Object.keys(rows[0]);
+    table.innerHTML = `
+      <thead><tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeHtml(r[c])}</td>`).join('')}</tr>`).join('')}</tbody>
+    `;
+  }
+
+  async function exportStock() {
+    if (!tires.length) {
+      showToast('Nada para exportar — o estoque está vazio.');
+      return;
+    }
+    await ensureXLSX();
+    const ws = XLSX.utils.json_to_sheet(buildExportRows());
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Estoque');
+    const dataStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `estoque-pneus-${dataStr}.xlsx`);
+  }
+
+  /* =========================================================================
+     10g. LEITOR DE CÓDIGO (compartilhado entre o campo do formulário e a
+     conferência de estoque)
+     Usa a BarcodeDetector API nativa do navegador quando disponível — ela lê
+     código de barras real (o que já vem de fábrica/nota na etiqueta do
+     pneu). Em navegadores sem suporte (ex: Firefox, Safari mais antigos),
+     cai para o jsQR, que só lê QR code — nesse caso a leitura de código de
+     barras não funciona, só de QR.
+  ========================================================================= */
+
+  const JSQR_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js';
+  async function ensureJsQR() {
+    if (typeof jsQR === 'undefined') await loadScriptOnce(JSQR_CDN);
+  }
+
+  const BARCODE_FORMATS = [
+    'qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'codabar', 'itf', 'data_matrix',
+  ];
+
+  // Retorna uma função async (canvas) => string|null que lê o próximo código
+  // visível no canvas, usando o melhor mecanismo disponível no navegador.
+  async function createCodeReader() {
+    if ('BarcodeDetector' in window) {
+      let formats = BARCODE_FORMATS;
+      try {
+        const supported = await window.BarcodeDetector.getSupportedFormats();
+        formats = BARCODE_FORMATS.filter((f) => supported.includes(f));
+        if (!formats.length) formats = supported;
+      } catch (e) {
+        // getSupportedFormats pode não existir em algumas implementações — segue com a lista padrão.
+      }
+      const detector = new window.BarcodeDetector({ formats });
+      return async (canvas) => {
+        try {
+          const codes = await detector.detect(canvas);
+          return codes.length ? codes[0].rawValue : null;
+        } catch (e) {
+          return null;
+        }
+      };
+    }
+
+    // Fallback: só lê QR code.
+    await ensureJsQR();
+    return async (canvas) => {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      return code ? code.data : null;
+    };
+  }
+
+  // Encontra o pneu cujo código de barras cadastrado bate com o que foi lido.
+  function findTireByScannedCode(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    return tires.find((t) => t.codigoBarras && t.codigoBarras.trim() === raw) || null;
+  }
+
+  /* =========================================================================
+     10h. LEITURA RÁPIDA (preenche o campo "código de barras" do formulário)
+  ========================================================================= */
+
+  let scanOnceStream = null;
+  let scanOnceRafId = null;
+  let scanOnceReader = null;
+  let scanOnceBusy = false;
+
+  async function openScanOnceModal() {
+    closeConferPanel();
+    document.getElementById('scanOnceModal').classList.add('open');
+
+    const statusEl = document.getElementById('scanOnceStatus');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Carregando leitor...';
+
+    try {
+      scanOnceReader = await createCodeReader();
+      statusEl.textContent = 'Solicitando acesso à câmera...';
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Este navegador não tem suporte a câmera (precisa de HTTPS ou localhost).');
+      }
+
+      scanOnceStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = document.getElementById('scanOnceVideo');
+      video.srcObject = scanOnceStream;
+      await video.play();
+
+      statusEl.style.display = 'none';
+      scanOnceBusy = false;
+      scanOnceLoop();
+    } catch (err) {
+      statusEl.textContent = err.message || 'Não foi possível acessar a câmera.';
+    }
+  }
+
+  function closeScanOnceModal() {
+    document.getElementById('scanOnceModal').classList.remove('open');
+    if (scanOnceRafId) {
+      cancelAnimationFrame(scanOnceRafId);
+      scanOnceRafId = null;
+    }
+    if (scanOnceStream) {
+      scanOnceStream.getTracks().forEach((track) => track.stop());
+      scanOnceStream = null;
+    }
+  }
+
+  async function scanOnceLoop() {
+    const video = document.getElementById('scanOnceVideo');
+    const canvas = document.getElementById('scanOnceCanvas');
+    if (!scanOnceStream) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA && !scanOnceBusy) {
+      scanOnceBusy = true;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      const text = await scanOnceReader(canvas);
+      scanOnceBusy = false;
+      if (text) {
+        fCodigoBarras.value = text.trim();
+        closeScanOnceModal();
+        showToast('Código lido com sucesso.');
+        return;
+      }
+    }
+    scanOnceRafId = requestAnimationFrame(scanOnceLoop);
+  }
+
+  /* =========================================================================
+     10i. CONFERÊNCIA DE ESTOQUE POR CÂMERA
+     Lê, pela câmera, o código de barras (ou QR) da etiqueta física do pneu e
+     compara com o código cadastrado em cada linha do estoque — vai marcando
+     cada item como conferido, sobrando no topo o que ainda não bateu.
+  ========================================================================= */
+
+  let conferStream = null;
+  let conferRafId = null;
+  let conferReader = null;
+  let conferBusy = false;
+  let conferChecked = new Set();
+  let conferLastScanAt = 0;
+  let conferLastCode = null;
+
+  function renderConferChecklist() {
+    const listEl = document.getElementById('conferChecklist');
+    document.getElementById('conferTotal').textContent = tires.length;
+    document.getElementById('conferCount').textContent = conferChecked.size;
+
+    const sorted = tires.slice().sort((a, b) => {
+      const aOk = conferChecked.has(a.id) ? 1 : 0;
+      const bOk = conferChecked.has(b.id) ? 1 : 0;
+      if (aOk !== bOk) return aOk - bOk; // não conferidos primeiro
+      return (a.marca || '').localeCompare(b.marca || '', 'pt-BR');
+    });
+
+    listEl.innerHTML = sorted.map((t) => {
+      const ok = conferChecked.has(t.id);
+      return `<div class="confer-item ${ok ? 'ok' : ''}">
+        <span class="mark">${ok ? '✓' : '—'}</span>
+        <span>${escapeHtml(t.marca)} ${escapeHtml(t.medida)} (${t.condicao === 'usado' ? 'usado' : 'novo'})</span>
+      </div>`;
+    }).join('');
+  }
+
+  function flashConferCam() {
+    const flash = document.getElementById('conferScanFlash');
+    flash.classList.add('on');
+    setTimeout(() => flash.classList.remove('on'), 200);
+  }
+
+  function handleConferScan(text) {
+    const raw = String(text || '').trim();
+    const now = Date.now();
+    // evita reler o mesmo código repetidas vezes seguidas, mas permite reler
+    // um código diferente na sequência sem esperar o cooldown todo.
+    if (raw === conferLastCode && now - conferLastScanAt < 1500) return;
+    conferLastScanAt = now;
+    conferLastCode = raw;
+
+    const t = findTireByScannedCode(raw);
+    flashConferCam();
+
+    if (!t) {
+      showToast('Código não encontrado no estoque.', {
+        actionLabel: 'Cadastrar',
+        duration: 4000,
+        onAction: () => {
+          closeConferPanel();
+    closeScanOnceModal();
+          openAddForm(raw);
+        },
+      });
+      return;
+    }
+
+    if (conferChecked.has(t.id)) {
+      showToast(`${t.marca} ${t.medida} já tinha sido conferido.`);
+      return;
+    }
+    conferChecked.add(t.id);
+    renderConferChecklist();
+    showToast(`✓ ${t.marca} ${t.medida} conferido (${conferChecked.size}/${tires.length}).`);
+  }
+
+  async function conferScanLoop() {
+    const video = document.getElementById('conferVideo');
+    const canvas = document.getElementById('conferCanvas');
+    if (!conferStream) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA && !conferBusy) {
+      conferBusy = true;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      const text = await conferReader(canvas);
+      conferBusy = false;
+      if (text) handleConferScan(text);
+    }
+    conferRafId = requestAnimationFrame(conferScanLoop);
+  }
+
+  async function openConferPanel() {
+    switchTab('estoque');
+    closeForm();
+    closeXmlPanel();
+    closeImportPanel();
+    closeSyncPanel();
+    closeScanOnceModal();
+    conferPanel.classList.add('open');
+
+    const statusEl = document.getElementById('conferStatus');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Carregando leitor...';
+    renderConferChecklist();
+
+    try {
+      conferReader = await createCodeReader();
+      statusEl.textContent = 'Solicitando acesso à câmera...';
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Este navegador não tem suporte a câmera (precisa de HTTPS ou localhost).');
+      }
+
+      conferStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      });
+      const video = document.getElementById('conferVideo');
+      video.srcObject = conferStream;
+      await video.play();
+
+      statusEl.style.display = 'none';
+      conferBusy = false;
+      conferRafId = requestAnimationFrame(conferScanLoop);
+    } catch (err) {
+      statusEl.textContent = err.message || 'Não foi possível acessar a câmera.';
+    }
+  }
+
+  function closeConferPanel() {
+    conferPanel.classList.remove('open');
+    if (conferRafId) {
+      cancelAnimationFrame(conferRafId);
+      conferRafId = null;
+    }
+    if (conferStream) {
+      conferStream.getTracks().forEach((track) => track.stop());
+      conferStream = null;
+    }
+  }
+
+  function resetConferencia() {
+    conferChecked = new Set();
+    renderConferChecklist();
+    showToast('Conferência reiniciada.');
   }
 
   async function handleSyncUpload(file) {
@@ -1411,9 +1988,39 @@
   document.getElementById('cancelSyncBtn').onclick = closeSyncPanel;
   document.getElementById('saveSyncBtn').onclick = saveSync;
 
-  document.getElementById('historyBtn').onclick = () => {
-    historyPanel.classList.contains('open') ? closeHistoryPanel() : openHistoryPanel();
+  document.querySelectorAll('.tabbar .tab').forEach((btn) => {
+    btn.onclick = () => switchTab(btn.dataset.tab);
+  });
+
+  document.getElementById('historyTireFilter').onchange = loadAndRenderHistory;
+  document.getElementById('historyFromFilter').onchange = loadAndRenderHistory;
+  document.getElementById('historyToFilter').onchange = loadAndRenderHistory;
+  document.getElementById('historyFilterClearBtn').onclick = () => {
+    document.getElementById('historyTireFilter').value = '';
+    document.getElementById('historyFromFilter').value = '';
+    document.getElementById('historyToFilter').value = '';
+    loadAndRenderHistory();
   };
+
+  document.getElementById('exportBtn').onclick = () => {
+    exportStock().catch(() => showToast('Não foi possível exportar o estoque.'));
+  };
+
+  document.getElementById('loadMoreBtn').onclick = loadMore;
+
+  document.getElementById('conferBtn').onclick = () => {
+    conferPanel.classList.contains('open') ? closeConferPanel() : openConferPanel();
+  };
+  document.getElementById('closeConferBtn').onclick = closeConferPanel;
+  document.getElementById('conferResetBtn').onclick = resetConferencia;
+
+  document.getElementById('scanCodigoBtn').onclick = openScanOnceModal;
+  document.getElementById('cancelScanOnceBtn').onclick = closeScanOnceModal;
+
+  window.addEventListener('beforeunload', () => {
+    if (conferStream) conferStream.getTracks().forEach((track) => track.stop());
+    if (scanOnceStream) scanOnceStream.getTracks().forEach((track) => track.stop());
+  });
 
   document.getElementById('searchInput').oninput = (e) => {
     searchTerm = e.target.value;
