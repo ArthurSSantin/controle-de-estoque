@@ -143,11 +143,23 @@
     text-transform:uppercase;
     letter-spacing:.04em;
     color:var(--ink-soft);
-    padding:10px 14px;
+    padding:8px 14px;
     border-bottom:1.5px solid var(--line);
     position:sticky;
     top:0;
     background:var(--surface);
+  }
+  .export-preview th label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .export-preview th input[type="checkbox"]{
+    accent-color:var(--amber);
+    cursor:pointer;
+    flex-shrink:0;
   }
   .export-preview td{
     padding:9px 14px;
@@ -155,6 +167,8 @@
     color:var(--ink);
   }
   .export-preview tr:last-child td{border-bottom:none;}
+  .export-preview .col-excluded{opacity:.35;}
+  .export-preview td.col-excluded{text-decoration:line-through;}
   .btn{
     border:none;
     cursor:pointer;
