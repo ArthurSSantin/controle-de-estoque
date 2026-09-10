@@ -99,4 +99,4 @@ Todas as rotas exigem um token JWT do Supabase Auth no cabeçalho `Authorization
 
 ## Licença
 
-Projeto de uso privado.
+Distribuído sob a licença MIT. Veja [LICENSE](./LICENSE) para mais detalhes.
