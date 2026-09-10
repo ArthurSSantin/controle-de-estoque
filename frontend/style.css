@@ -279,16 +279,56 @@
   }
   .sort-select:focus{outline:2px solid var(--amber);outline-offset:1px;}
 
-  /* FORM PANEL */
+  /* POP-OUT (MODAL) PANELS */
   .panel{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(33,29,24,.55);
+    z-index:200;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+    overflow-y:auto;
+  }
+  .panel.open{display:flex;}
+  #scanOnceModal, #scannerModal{ z-index:260; }
+  .modal-card{
     background:var(--surface);
     border:1px solid var(--line);
     border-radius:var(--radius);
     padding:20px;
-    margin-bottom:22px;
-    display:none;
+    width:100%;
+    max-width:640px;
+    max-height:90vh;
+    overflow-y:auto;
+    margin:auto;
   }
-  .panel.open{display:block;}
+  .sticker-card{max-width:380px;text-align:center;}
+  .sticker-badge{font-size:40px;margin-bottom:8px;}
+  .sticker-field{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    padding:8px 2px;
+    border-bottom:1px dashed var(--line);
+    font-size:13.5px;
+    text-align:left;
+  }
+  .sticker-field span{color:var(--ink-soft);}
+  .sticker-qty{font-family:'IBM Plex Mono',monospace;font-size:22px;color:var(--green);}
+  .sticker-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
+  .sticker-actions .btn{flex:1;}
+  .sticker-adjust{display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+  .sticker-adjust.show{display:block;}
+  .sticker-adjust-input{
+    width:100%;
+    padding:10px 12px;
+    border:1.5px solid var(--line);
+    border-radius:8px;
+    font-size:16px;
+    margin-bottom:10px;
+  }
   .panel h2{
     font-family:'Oswald',sans-serif;
     font-size:15px;
@@ -705,14 +745,7 @@
   .dash-legend span{display:inline-flex;align-items:center;gap:6px;}
   .dash-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
 
-  /* CONFERÊNCIA POR CÂMERA */
-  .confer-layout{
-    display:grid;
-    grid-template-columns:1.1fr .9fr;
-    gap:16px;
-    margin-bottom:16px;
-  }
-  @media(max-width:800px){ .confer-layout{grid-template-columns:1fr;} }
+  /* SCANNER (câmera pop-out) */
   .confer-cam{
     position:relative;
     background:#000;
@@ -733,30 +766,3 @@
     transition:opacity .15s ease;
   }
   .confer-flash.on{opacity:.45;}
-  .confer-side{display:flex;flex-direction:column;gap:10px;min-height:0;}
-  .confer-progress{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:15px;
-    color:var(--ink);
-  }
-  .confer-progress b{font-size:20px;color:var(--green);}
-  .confer-checklist{
-    flex:1;
-    overflow-y:auto;
-    max-height:340px;
-    display:flex;
-    flex-direction:column;
-    gap:6px;
-  }
-  .confer-item{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:8px 10px;
-    border:1px solid var(--line);
-    border-radius:7px;
-    background:#fff;
-    font-size:12.5px;
-  }
-  .confer-item.ok{border-color:var(--green);background:var(--green-bg);color:var(--green);}
-  .confer-item .mark{font-weight:700;width:16px;text-align:center;}
