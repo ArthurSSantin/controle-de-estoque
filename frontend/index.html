@@ -86,7 +86,7 @@
       </div>
     </div>
     <div class="action-group-btns">
-      <button class="btn btn-secondary" id="conferBtn">📷 Conferência</button>
+      <button class="btn btn-secondary" id="conferBtn">📷 Verificar pneu</button>
       <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
     </div>
   </div>
@@ -124,8 +124,9 @@
     <button class="btn btn-ghost" id="clearSearchBtn">Limpar</button>
   </div>
 
-  <!-- FORMULÁRIO MANUAL -->
+  <!-- FORMULÁRIO MANUAL (pop-out) -->
   <div class="panel" id="formPanel">
+   <div class="modal-card">
     <h2 id="formTitle">Adicionar pneu</h2>
     <p class="sub">Preencha os dados do item</p>
     <div class="form-grid">
@@ -171,10 +172,12 @@
       <button class="btn btn-ghost" id="cancelBtn">Cancelar</button>
       <button class="btn btn-primary" id="saveBtn">Salvar</button>
     </div>
+   </div>
   </div>
 
-  <!-- ENTRADA POR XML (NF-e) -->
+  <!-- ENTRADA POR XML (NF-e) (pop-out) -->
   <div class="panel" id="xmlPanel">
+   <div class="modal-card">
     <h2>Entrada por XML (NF-e)</h2>
     <p class="sub">
       Envie o arquivo .xml da nota fiscal (o mesmo que seu fornecedor te envia, ou que você baixa do portal da nota).
@@ -207,10 +210,12 @@
       </div>
       <div class="err" id="xmlErr"></div>
     </div>
+   </div>
   </div>
 
-  <!-- IMPORTAR PLANILHA / PDF -->
+  <!-- IMPORTAR PLANILHA / PDF (pop-out) -->
   <div class="panel" id="importPanel">
+   <div class="modal-card">
     <h2>Importar planilha ou relatório em PDF</h2>
     <p class="sub">
       Envie um arquivo .xlsx, .xls, .csv (colunas Marca, Medida, Quantidade, Preço, Condição)
@@ -235,10 +240,12 @@
       </div>
     </div>
     <div class="err" id="importErr"></div>
+   </div>
   </div>
 
-  <!-- SINCRONIZAR COM A EMPRESA -->
+  <!-- SINCRONIZAR COM A EMPRESA (pop-out) -->
   <div class="panel" id="syncPanel">
+   <div class="modal-card">
     <h2>Sincronizar com o estoque da empresa</h2>
     <p class="sub">
       Envie o relatório de estoque mais recente da empresa (PDF ou planilha). Os itens marcados como
@@ -265,10 +272,12 @@
       </div>
     </div>
     <div class="err" id="syncErr"></div>
+   </div>
   </div>
 
-  <!-- LEITURA RÁPIDA DE UM CÓDIGO (usado pelo botão 📷 do formulário) -->
+  <!-- LEITURA RÁPIDA DE UM CÓDIGO (usado pelo botão 📷 dentro de qualquer pop-out, ex: Editar) -->
   <div class="panel" id="scanOnceModal">
+   <div class="modal-card">
     <h2>Ler código de barras</h2>
     <p class="sub">Aponte a câmera para o código de barras da etiqueta do pneu.</p>
     <div class="confer-cam" style="max-width:360px;margin:0 auto 14px;">
@@ -279,33 +288,64 @@
     <div class="form-actions">
       <button class="btn btn-ghost" id="cancelScanOnceBtn">Cancelar</button>
     </div>
+   </div>
   </div>
 
-  <!-- CONFERÊNCIA POR CÂMERA -->
-  <div class="panel" id="conferPanel">
-    <h2>Conferência de estoque físico</h2>
-    <p class="sub">
-      Aponte a câmera para o código de barras da etiqueta física de cada pneu.
-      Cada leitura marca o item como conferido nesta lista.
-    </p>
-    <div class="confer-layout">
-      <div class="confer-cam">
-        <video id="conferVideo" playsinline muted></video>
-        <canvas id="conferCanvas" style="display:none;"></canvas>
-        <div id="conferScanFlash" class="confer-flash"></div>
-      </div>
-      <div class="confer-side">
-        <div id="conferStatus" class="scan-hint"></div>
-        <div class="confer-progress">
-          <b id="conferCount">0</b> / <span id="conferTotal">0</span> conferidos
-        </div>
-        <div id="conferChecklist" class="confer-checklist"></div>
-      </div>
+  <!-- VERIFICAÇÃO AVULSA POR CÂMERA (estilo álbum de figurinhas) -->
+  <div class="panel" id="scannerModal">
+   <div class="modal-card">
+    <h2>Verificar pneu</h2>
+    <p class="sub">Aponte a câmera para o código de barras da etiqueta física do pneu.</p>
+    <div class="confer-cam" style="max-width:360px;margin:0 auto 14px;">
+      <video id="scannerVideo" playsinline muted></video>
+      <canvas id="scannerCanvas" style="display:none;"></canvas>
+      <div id="scannerFlash" class="confer-flash"></div>
     </div>
+    <div id="scannerStatus" class="scan-hint"></div>
     <div class="form-actions">
-      <button class="btn btn-ghost" id="conferResetBtn">Reiniciar conferência</button>
-      <button class="btn btn-primary" id="closeConferBtn">Fechar</button>
+      <button class="btn btn-ghost" id="cancelScannerBtn">Cancelar</button>
     </div>
+   </div>
+  </div>
+
+  <!-- FIGURINHA DO ITEM ESCANEADO -->
+  <div class="panel" id="stickerModal">
+   <div class="modal-card sticker-card">
+    <div id="stickerFound">
+      <div class="sticker-badge">🛞</div>
+      <div class="sticker-field"><span>Marca / modelo</span><b id="stickerMarca">—</b></div>
+      <div class="sticker-field"><span>Medida</span><b id="stickerMedida">—</b></div>
+      <div class="sticker-field"><span>Quantidade em estoque</span><b class="sticker-qty" id="stickerQtd">0</b></div>
+
+      <div class="sticker-actions" id="stickerMainActions">
+        <button class="btn btn-secondary" id="stickerAddBtn">➕ Adicionar mais pneus</button>
+        <button class="btn btn-secondary" id="stickerRemoveBtn">➖ Remover pneu</button>
+      </div>
+
+      <div class="sticker-adjust" id="stickerAdjust">
+        <p class="sub" id="stickerAdjustLabel">Quantidade a somar</p>
+        <input type="number" id="stickerAdjustQtd" min="1" step="1" placeholder="0" class="sticker-adjust-input">
+        <div class="err" id="stickerAdjustErr"></div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" id="stickerAdjustCancelBtn">Voltar</button>
+          <button class="btn btn-primary" id="stickerAdjustConfirmBtn">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="stickerNotFound" style="display:none;">
+      <div class="sticker-badge">❓</div>
+      <p class="sub" style="text-align:center;">Nenhum pneu cadastrado com este código de barras.</p>
+      <div class="form-actions" style="justify-content:center;">
+        <button class="btn btn-primary" id="stickerCadastrarBtn">Cadastrar este código</button>
+      </div>
+    </div>
+
+    <div class="form-actions" style="margin-top:14px;">
+      <button class="btn btn-ghost" id="stickerRescanBtn">📷 Ler outro código</button>
+      <button class="btn btn-primary" id="closeStickerBtn">Fechar</button>
+    </div>
+   </div>
   </div>
 
   <div id="content">

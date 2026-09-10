@@ -113,7 +113,8 @@
   const xmlPanel = document.getElementById('xmlPanel');
   const importPanel = document.getElementById('importPanel');
   const syncPanel = document.getElementById('syncPanel');
-  const conferPanel = document.getElementById('conferPanel');
+  const scannerModal = document.getElementById('scannerModal');
+  const stickerModal = document.getElementById('stickerModal');
   const formTitle = document.getElementById('formTitle');
   const formErr = document.getElementById('formErr');
   const toast = document.getElementById('toast');
@@ -779,7 +780,7 @@
     closeXmlPanel();
     closeImportPanel();
     closeSyncPanel();
-    closeConferPanel();
+    closeScanFlow();
     closeScanOnceModal();
     editingId = null;
     formTitle.textContent = 'Adicionar pneu';
@@ -800,7 +801,7 @@
     closeXmlPanel();
     closeImportPanel();
     closeSyncPanel();
-    closeConferPanel();
+    closeScanFlow();
     closeScanOnceModal();
     const t = tires.find((x) => x.id === id);
     if (!t) return;
@@ -994,7 +995,7 @@
     closeForm();
     closeImportPanel();
     closeSyncPanel();
-    closeConferPanel();
+    closeScanFlow();
     closeScanOnceModal();
     xmlPanel.classList.add('open');
     document.getElementById('xmlStatus').style.display = 'none';
@@ -1228,7 +1229,7 @@
     closeForm();
     closeXmlPanel();
     closeSyncPanel();
-    closeConferPanel();
+    closeScanFlow();
     closeScanOnceModal();
     importPanel.classList.add('open');
     document.getElementById('importRows').innerHTML = '';
@@ -1389,7 +1390,7 @@
     closeForm();
     closeXmlPanel();
     closeImportPanel();
-    closeConferPanel();
+    closeScanFlow();
     closeScanOnceModal();
     syncPanel.classList.add('open');
     document.getElementById('syncRows').innerHTML = '';
@@ -1680,7 +1681,7 @@
   let scanOnceBusy = false;
 
   async function openScanOnceModal() {
-    closeConferPanel();
+    closeScanFlow();
     document.getElementById('scanOnceModal').classList.add('open');
 
     const statusEl = document.getElementById('scanOnceStatus');
@@ -1743,151 +1744,192 @@
   }
 
   /* =========================================================================
-     10i. CONFERÊNCIA DE ESTOQUE POR CÂMERA
-     Lê, pela câmera, o código de barras (ou QR) da etiqueta física do pneu e
-     compara com o código cadastrado em cada linha do estoque — vai marcando
-     cada item como conferido, sobrando no topo o que ainda não bateu.
+     10i. VERIFICAÇÃO AVULSA POR CÂMERA (estilo álbum de figurinhas)
+     Cada leitura identifica um único pneu, fecha a câmera na hora e mostra,
+     num pop-out, os dados daquele item — com ações rápidas para somar ou
+     subtrair a quantidade em estoque.
   ========================================================================= */
 
-  let conferStream = null;
-  let conferRafId = null;
-  let conferReader = null;
-  let conferBusy = false;
-  let conferChecked = new Set();
-  let conferLastScanAt = 0;
-  let conferLastCode = null;
+  let scannerStream = null;
+  let scannerRafId = null;
+  let scannerReader = null;
+  let scannerBusy = false;
 
-  function renderConferChecklist() {
-    const listEl = document.getElementById('conferChecklist');
-    document.getElementById('conferTotal').textContent = tires.length;
-    document.getElementById('conferCount').textContent = conferChecked.size;
+  let stickerTire = null;       // pneu exibido na figurinha atual
+  let stickerAdjustMode = null; // 'add' | 'remove'
 
-    const sorted = tires.slice().sort((a, b) => {
-      const aOk = conferChecked.has(a.id) ? 1 : 0;
-      const bOk = conferChecked.has(b.id) ? 1 : 0;
-      if (aOk !== bOk) return aOk - bOk; // não conferidos primeiro
-      return (a.marca || '').localeCompare(b.marca || '', 'pt-BR');
-    });
-
-    listEl.innerHTML = sorted.map((t) => {
-      const ok = conferChecked.has(t.id);
-      return `<div class="confer-item ${ok ? 'ok' : ''}">
-        <span class="mark">${ok ? '✓' : '—'}</span>
-        <span>${escapeHtml(t.marca)} ${escapeHtml(t.medida)} (${t.condicao === 'usado' ? 'usado' : 'novo'})</span>
-      </div>`;
-    }).join('');
-  }
-
-  function flashConferCam() {
-    const flash = document.getElementById('conferScanFlash');
+  function flashScannerCam() {
+    const flash = document.getElementById('scannerFlash');
     flash.classList.add('on');
     setTimeout(() => flash.classList.remove('on'), 200);
   }
 
-  function handleConferScan(text) {
-    const raw = String(text || '').trim();
-    const now = Date.now();
-    // evita reler o mesmo código repetidas vezes seguidas, mas permite reler
-    // um código diferente na sequência sem esperar o cooldown todo.
-    if (raw === conferLastCode && now - conferLastScanAt < 1500) return;
-    conferLastScanAt = now;
-    conferLastCode = raw;
-
-    const t = findTireByScannedCode(raw);
-    flashConferCam();
-
-    if (!t) {
-      showToast('Código não encontrado no estoque.', {
-        actionLabel: 'Cadastrar',
-        duration: 4000,
-        onAction: () => {
-          closeConferPanel();
-    closeScanOnceModal();
-          openAddForm(raw);
-        },
-      });
-      return;
-    }
-
-    if (conferChecked.has(t.id)) {
-      showToast(`${t.marca} ${t.medida} já tinha sido conferido.`);
-      return;
-    }
-    conferChecked.add(t.id);
-    renderConferChecklist();
-    showToast(`✓ ${t.marca} ${t.medida} conferido (${conferChecked.size}/${tires.length}).`);
-  }
-
-  async function conferScanLoop() {
-    const video = document.getElementById('conferVideo');
-    const canvas = document.getElementById('conferCanvas');
-    if (!conferStream) return;
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA && !conferBusy) {
-      conferBusy = true;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-      const text = await conferReader(canvas);
-      conferBusy = false;
-      if (text) handleConferScan(text);
-    }
-    conferRafId = requestAnimationFrame(conferScanLoop);
-  }
-
-  async function openConferPanel() {
+  async function openScannerModal() {
     switchTab('estoque');
     closeForm();
     closeXmlPanel();
     closeImportPanel();
     closeSyncPanel();
     closeScanOnceModal();
-    conferPanel.classList.add('open');
+    closeStickerModal();
+    scannerModal.classList.add('open');
 
-    const statusEl = document.getElementById('conferStatus');
+    const statusEl = document.getElementById('scannerStatus');
     statusEl.style.display = 'block';
     statusEl.textContent = 'Carregando leitor...';
-    renderConferChecklist();
 
     try {
-      conferReader = await createCodeReader();
+      scannerReader = await createCodeReader();
       statusEl.textContent = 'Solicitando acesso à câmera...';
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Este navegador não tem suporte a câmera (precisa de HTTPS ou localhost).');
       }
 
-      conferStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
-      const video = document.getElementById('conferVideo');
-      video.srcObject = conferStream;
+      scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = document.getElementById('scannerVideo');
+      video.srcObject = scannerStream;
       await video.play();
 
       statusEl.style.display = 'none';
-      conferBusy = false;
-      conferRafId = requestAnimationFrame(conferScanLoop);
+      scannerBusy = false;
+      scannerRafId = requestAnimationFrame(scannerScanLoop);
     } catch (err) {
       statusEl.textContent = err.message || 'Não foi possível acessar a câmera.';
     }
   }
 
-  function closeConferPanel() {
-    conferPanel.classList.remove('open');
-    if (conferRafId) {
-      cancelAnimationFrame(conferRafId);
-      conferRafId = null;
+  function closeScannerModal() {
+    scannerModal.classList.remove('open');
+    if (scannerRafId) {
+      cancelAnimationFrame(scannerRafId);
+      scannerRafId = null;
     }
-    if (conferStream) {
-      conferStream.getTracks().forEach((track) => track.stop());
-      conferStream = null;
+    if (scannerStream) {
+      scannerStream.getTracks().forEach((track) => track.stop());
+      scannerStream = null;
     }
   }
 
-  function resetConferencia() {
-    conferChecked = new Set();
-    renderConferChecklist();
-    showToast('Conferência reiniciada.');
+  async function scannerScanLoop() {
+    const video = document.getElementById('scannerVideo');
+    const canvas = document.getElementById('scannerCanvas');
+    if (!scannerStream) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA && !scannerBusy) {
+      scannerBusy = true;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      const text = await scannerReader(canvas);
+      scannerBusy = false;
+      if (text) {
+        const raw = text.trim();
+        flashScannerCam();
+        closeScannerModal();
+        openStickerModal(findTireByScannedCode(raw), raw);
+        return;
+      }
+    }
+    scannerRafId = requestAnimationFrame(scannerScanLoop);
+  }
+
+  function renderStickerTire() {
+    if (!stickerTire) return;
+    document.getElementById('stickerMarca').textContent = stickerTire.marca || '—';
+    document.getElementById('stickerMedida').textContent = stickerTire.medida || '—';
+    document.getElementById('stickerQtd').textContent = stickerTire.quantidade ?? 0;
+  }
+
+  function openStickerModal(tire, rawCode) {
+    stickerTire = tire || null;
+    closeStickerAdjust();
+
+    const foundEl = document.getElementById('stickerFound');
+    const notFoundEl = document.getElementById('stickerNotFound');
+
+    if (!tire) {
+      foundEl.style.display = 'none';
+      notFoundEl.style.display = 'block';
+      document.getElementById('stickerCadastrarBtn').onclick = () => {
+        closeStickerModal();
+        openAddForm(rawCode);
+      };
+    } else {
+      foundEl.style.display = 'block';
+      notFoundEl.style.display = 'none';
+      renderStickerTire();
+    }
+
+    stickerModal.classList.add('open');
+  }
+
+  function closeStickerModal() {
+    stickerModal.classList.remove('open');
+    stickerTire = null;
+    closeStickerAdjust();
+  }
+
+  function openStickerAdjust(mode) {
+    stickerAdjustMode = mode;
+    document.getElementById('stickerMainActions').style.display = 'none';
+    document.getElementById('stickerAdjustLabel').textContent =
+      mode === 'add' ? 'Quantidade a somar' : 'Quantidade a remover';
+    const qtdInput = document.getElementById('stickerAdjustQtd');
+    qtdInput.value = '';
+    document.getElementById('stickerAdjustErr').classList.remove('show');
+    document.getElementById('stickerAdjust').classList.add('show');
+    qtdInput.focus();
+  }
+
+  function closeStickerAdjust() {
+    stickerAdjustMode = null;
+    document.getElementById('stickerMainActions').style.display = 'flex';
+    document.getElementById('stickerAdjust').classList.remove('show');
+  }
+
+  async function confirmStickerAdjust() {
+    const errEl = document.getElementById('stickerAdjustErr');
+    errEl.classList.remove('show');
+
+    const raw = document.getElementById('stickerAdjustQtd').value.trim();
+    const delta = Number(raw);
+    if (raw === '' || isNaN(delta) || delta <= 0 || !Number.isInteger(delta)) {
+      errEl.textContent = 'Informe uma quantidade válida.';
+      errEl.classList.add('show');
+      return;
+    }
+
+    const t = stickerTire;
+    if (!t) return;
+    const novaQtd = stickerAdjustMode === 'add' ? t.quantidade + delta : t.quantidade - delta;
+    if (novaQtd < 0) {
+      errEl.textContent = 'Essa quantidade deixaria o estoque negativo.';
+      errEl.classList.add('show');
+      return;
+    }
+
+    try {
+      const updated = { ...t, quantidade: novaQtd, origem: t.origem === 'empresa' ? 'local' : t.origem };
+      await api.update(t.id, updated);
+      Object.assign(t, updated);
+      renderStickerTire();
+      closeStickerAdjust();
+      render();
+      showToast(
+        stickerAdjustMode === 'add'
+          ? `+${delta} un. adicionada(s) — novo total: ${novaQtd}.`
+          : `-${delta} un. removida(s) — novo total: ${novaQtd}.`
+      );
+    } catch (e) {
+      errEl.textContent = e.message || 'Não foi possível atualizar o estoque. Verifique sua conexão com a API.';
+      errEl.classList.add('show');
+    }
+  }
+
+  function closeScanFlow() {
+    closeScannerModal();
+    closeStickerModal();
   }
 
   async function handleSyncUpload(file) {
@@ -2008,17 +2050,21 @@
 
   document.getElementById('loadMoreBtn').onclick = loadMore;
 
-  document.getElementById('conferBtn').onclick = () => {
-    conferPanel.classList.contains('open') ? closeConferPanel() : openConferPanel();
-  };
-  document.getElementById('closeConferBtn').onclick = closeConferPanel;
-  document.getElementById('conferResetBtn').onclick = resetConferencia;
+  document.getElementById('conferBtn').onclick = openScannerModal;
+  document.getElementById('cancelScannerBtn').onclick = closeScannerModal;
+
+  document.getElementById('stickerAddBtn').onclick = () => openStickerAdjust('add');
+  document.getElementById('stickerRemoveBtn').onclick = () => openStickerAdjust('remove');
+  document.getElementById('stickerAdjustCancelBtn').onclick = closeStickerAdjust;
+  document.getElementById('stickerAdjustConfirmBtn').onclick = confirmStickerAdjust;
+  document.getElementById('stickerRescanBtn').onclick = openScannerModal;
+  document.getElementById('closeStickerBtn').onclick = closeStickerModal;
 
   document.getElementById('scanCodigoBtn').onclick = openScanOnceModal;
   document.getElementById('cancelScanOnceBtn').onclick = closeScanOnceModal;
 
   window.addEventListener('beforeunload', () => {
-    if (conferStream) conferStream.getTracks().forEach((track) => track.stop());
+    if (scannerStream) scannerStream.getTracks().forEach((track) => track.stop());
     if (scanOnceStream) scanOnceStream.getTracks().forEach((track) => track.stop());
   });
 
@@ -2048,6 +2094,23 @@
     sortMode = e.target.value;
     render();
   };
+
+  // Fecha o pop-out ao clicar fora do card (no fundo escurecido).
+  const MODAL_CLOSERS = {
+    formPanel: closeForm,
+    xmlPanel: closeXmlPanel,
+    importPanel: closeImportPanel,
+    syncPanel: closeSyncPanel,
+    scanOnceModal: closeScanOnceModal,
+    scannerModal: closeScannerModal,
+    stickerModal: closeStickerModal,
+  };
+  Object.keys(MODAL_CLOSERS).forEach((id) => {
+    const el = document.getElementById(id);
+    el.addEventListener('click', (e) => {
+      if (e.target === el) MODAL_CLOSERS[id]();
+    });
+  });
 
   window.__bootApp = load;
 })();
