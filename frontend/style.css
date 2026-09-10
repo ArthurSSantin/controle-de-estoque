@@ -89,7 +89,10 @@
     border-bottom:2px solid var(--line);
     margin-bottom:22px;
     overflow-x:auto;
+    scrollbar-width:none;
+    -ms-overflow-style:none;
   }
+  .tabbar::-webkit-scrollbar{display:none;}
   .tab{
     border:none;
     background:transparent;
