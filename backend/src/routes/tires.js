@@ -45,6 +45,8 @@ function validateTirePayload(body) {
       novo: body.novo !== undefined ? Boolean(body.novo) : true,
       nota_ref: body.notaRef ? String(body.notaRef).trim().slice(0, MAX_TEXT_LEN) : null,
       origem: body.origem === 'empresa' ? 'empresa' : 'local',
+      fornecedor: body.fornecedor ? String(body.fornecedor).trim().slice(0, MAX_TEXT_LEN) : null,
+      codigo_barras: body.codigoBarras ? String(body.codigoBarras).trim().slice(0, MAX_TEXT_LEN) : null,
     },
   };
 }
@@ -64,6 +66,8 @@ function toApi(row) {
     novo: row.novo,
     notaRef: row.nota_ref,
     origem: row.origem || 'local',
+    fornecedor: row.fornecedor || null,
+    codigoBarras: row.codigo_barras || null,
     addedAt: row.created_at ? new Date(row.created_at).getTime() : null,
   };
 }
@@ -71,6 +75,9 @@ function toApi(row) {
 // Esconde detalhes internos do erro do Supabase do cliente, mas loga no servidor.
 function handleDbError(res, error) {
   console.error('Erro no Supabase:', error.message);
+  if (error.code === '23505' && /codigo_barras/.test(error.message || '')) {
+    return res.status(409).json({ error: 'Esse código de barras já está cadastrado em outro item do estoque.' });
+  }
   return res.status(500).json({ error: 'Não foi possível completar a operação. Tente novamente.' });
 }
 
@@ -136,17 +143,25 @@ function diffToHistoryEntries(oldRow, newRow) {
   return entries;
 }
 
-// GET /api/tires — lista os pneus do usuário logado
+// GET /api/tires — lista os pneus do usuário logado, paginado.
 // (a política de RLS já restringe isso sozinha, mas o filtro aqui deixa explícito)
+// ?limit= (padrão/máx TIRES_MAX_LIMIT) e ?offset= controlam a página.
+const TIRES_DEFAULT_LIMIT = 200;
+const TIRES_MAX_LIMIT = 500;
+
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await req.supabase
+    const limit = Math.min(Math.max(Number(req.query.limit) || TIRES_DEFAULT_LIMIT, 1), TIRES_MAX_LIMIT);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+    const { data, error, count } = await req.supabase
       .from('tires')
-      .select('*')
-      .order('created_at', { ascending: true });
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: true })
+      .range(offset, offset + limit - 1);
 
     if (error) return handleDbError(res, error);
-    res.json(data.map(toApi));
+    res.json({ items: data.map(toApi), total: count ?? data.length, offset, limit });
   } catch (err) {
     handleDbError(res, err);
   }

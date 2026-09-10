@@ -70,18 +70,37 @@
         <span>Controle por medida e quantidade</span>
       </div>
     </div>
-    <div class="header-actions">
-      <div class="user-bar">
-        <span>Logado como <b id="userEmail"></b></span>
-        <button class="btn btn-ghost" id="logoutBtn">Sair</button>
+    <div class="user-bar">
+      <span>Logado como <b id="userEmail"></b></span>
+      <button class="btn btn-ghost" id="logoutBtn">Sair</button>
+    </div>
+  </div>
+
+  <div class="header-actions">
+    <div class="action-group">
+      <span class="action-group-label">Entrada de estoque</span>
+      <div class="action-group-btns">
+        <button class="btn btn-secondary" id="xmlBtn">📄 XML (NF-e)</button>
+        <button class="btn btn-secondary" id="importBtn">📊 Planilha/PDF</button>
+        <button class="btn btn-secondary" id="syncBtn">🔄 Sincronizar empresa</button>
       </div>
-      <button class="btn btn-secondary" id="xmlBtn">📄 Entrada por XML (NF-e)</button>
-      <button class="btn btn-secondary" id="importBtn">📊 Importar planilha/PDF</button>
-      <button class="btn btn-secondary" id="syncBtn">🔄 Sincronizar com a empresa</button>
-      <button class="btn btn-secondary" id="historyBtn">📜 Histórico</button>
+    </div>
+    <div class="action-group-btns">
+      <button class="btn btn-secondary" id="conferBtn">📷 Conferência</button>
       <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
     </div>
   </div>
+
+  <!-- NAVEGAÇÃO POR ABAS -->
+  <div class="tabbar" role="tablist" aria-label="Seções do estoque">
+    <button class="tab active" role="tab" aria-selected="true" aria-controls="tabEstoque" data-tab="estoque">📦 Estoque</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="tabHistorico" data-tab="historico">📜 Histórico</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="tabDashboard" data-tab="dashboard">📈 Dashboard</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="tabExportar" data-tab="exportar">📤 Exportar</button>
+  </div>
+
+  <!-- ================= ABA: ESTOQUE ================= -->
+  <div class="tab-panel" id="tabEstoque" role="tabpanel">
 
   <div class="stats" id="stats"></div>
 
@@ -133,6 +152,18 @@
           <option value="novo">Novo</option>
           <option value="usado">Usado</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="fFornecedor">Fornecedor</label>
+        <input type="text" id="fFornecedor" placeholder="Opcional">
+      </div>
+      <div class="field">
+        <label for="fCodigoBarras">Código de barras (etiqueta física)</label>
+        <div class="field-with-btn">
+          <input type="text" id="fCodigoBarras" placeholder="Opcional — escaneie ou digite">
+          <button type="button" class="btn btn-ghost scan-inline-btn" id="scanCodigoBtn" title="Ler com a câmera">📷</button>
+        </div>
+        <small>Usado na conferência de estoque físico x digital</small>
       </div>
     </div>
     <div class="err" id="formErr"></div>
@@ -236,19 +267,96 @@
     <div class="err" id="syncErr"></div>
   </div>
 
-  <!-- HISTÓRICO -->
-  <div class="panel" id="historyPanel">
-    <h2>Histórico de movimentações</h2>
+  <!-- LEITURA RÁPIDA DE UM CÓDIGO (usado pelo botão 📷 do formulário) -->
+  <div class="panel" id="scanOnceModal">
+    <h2>Ler código de barras</h2>
+    <p class="sub">Aponte a câmera para o código de barras da etiqueta do pneu.</p>
+    <div class="confer-cam" style="max-width:360px;margin:0 auto 14px;">
+      <video id="scanOnceVideo" playsinline muted></video>
+      <canvas id="scanOnceCanvas" style="display:none;"></canvas>
+    </div>
+    <div id="scanOnceStatus" class="scan-hint"></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="cancelScanOnceBtn">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- CONFERÊNCIA POR CÂMERA -->
+  <div class="panel" id="conferPanel">
+    <h2>Conferência de estoque físico</h2>
     <p class="sub">
-      Entradas e saídas de quantidade, criações, exclusões e edições de marca/medida/preço —
-      mais recente primeiro.
+      Aponte a câmera para o código de barras da etiqueta física de cada pneu.
+      Cada leitura marca o item como conferido nesta lista.
     </p>
-    <div id="historyStatus" class="scan-hint" style="display:none;"></div>
-    <div id="historyList"></div>
+    <div class="confer-layout">
+      <div class="confer-cam">
+        <video id="conferVideo" playsinline muted></video>
+        <canvas id="conferCanvas" style="display:none;"></canvas>
+        <div id="conferScanFlash" class="confer-flash"></div>
+      </div>
+      <div class="confer-side">
+        <div id="conferStatus" class="scan-hint"></div>
+        <div class="confer-progress">
+          <b id="conferCount">0</b> / <span id="conferTotal">0</span> conferidos
+        </div>
+        <div id="conferChecklist" class="confer-checklist"></div>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="conferResetBtn">Reiniciar conferência</button>
+      <button class="btn btn-primary" id="closeConferBtn">Fechar</button>
+    </div>
   </div>
 
   <div id="content">
     <div class="loading">Carregando estoque...</div>
+  </div>
+
+  <div class="toolbar" id="paginationBar" style="display:none;justify-content:center;">
+    <span class="sub" id="paginationInfo"></span>
+    <button class="btn btn-ghost" id="loadMoreBtn">Carregar mais</button>
+  </div>
+
+  </div><!-- /tabEstoque -->
+
+  <!-- ================= ABA: HISTÓRICO ================= -->
+  <div class="tab-panel tab-panel-card" id="tabHistorico" role="tabpanel" hidden>
+    <h2 class="tab-panel-title">Histórico de movimentações</h2>
+    <p class="sub">
+      Entradas e saídas de quantidade, criações, exclusões e edições de marca/medida/preço —
+      mais recente primeiro.
+    </p>
+    <div class="toolbar" style="margin-bottom:14px;">
+      <select id="historyTireFilter" class="sort-select">
+        <option value="">Todos os pneus</option>
+      </select>
+      <input type="date" id="historyFromFilter" class="sort-select" title="De">
+      <input type="date" id="historyToFilter" class="sort-select" title="Até">
+      <button class="btn btn-ghost" id="historyFilterClearBtn">Limpar filtro</button>
+    </div>
+    <div id="historyStatus" class="scan-hint" style="display:none;"></div>
+    <div id="historyList"></div>
+  </div>
+
+  <!-- ================= ABA: DASHBOARD ================= -->
+  <div class="tab-panel tab-panel-card" id="tabDashboard" role="tabpanel" hidden>
+    <h2 class="tab-panel-title">Dashboard de movimentações</h2>
+    <p class="sub">Entradas e saídas de quantidade nos últimos 14 dias.</p>
+    <div id="dashboardStatus" class="scan-hint" style="display:none;"></div>
+    <div id="dashboardChart"></div>
+  </div>
+
+  <!-- ================= ABA: EXPORTAR ================= -->
+  <div class="tab-panel tab-panel-card" id="tabExportar" role="tabpanel" hidden>
+    <h2 class="tab-panel-title">Exportar estoque</h2>
+    <p class="sub">Pré-visualização do que será exportado para planilha — reflete o estoque carregado agora.</p>
+    <div class="toolbar" style="justify-content:space-between;">
+      <span class="sub" id="exportSummary">0 itens</span>
+      <button class="btn btn-primary" id="exportBtn">📤 Baixar planilha (.xlsx)</button>
+    </div>
+    <div class="export-preview-wrap">
+      <table class="export-preview" id="exportPreviewTable"></table>
+    </div>
   </div>
 
 </div>
