@@ -1,197 +1,102 @@
 # Controle de Estoque de Pneus 🛞
 
-Aplicação simples para controlar o estoque de pneus de uma loja: cadastro, edição,
-exclusão, ordenação automática por aro (R13 a R20), entrada rápida por leitura de
-código de barras/QR da nota fiscal, tag de itens recém-adicionados e tag de
-condição (novo / usado).
+Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas isoladas por empresa.
 
-## Estrutura do projeto
+## Funcionalidades
+
+- Cadastro, edição e exclusão de pneus (marca, medida, quantidade, preço, condição, fornecedor, código de barras).
+- Ordenação automática por aro (R13–R20) ou por quantidade em estoque.
+- Entrada rápida via XML de nota fiscal (NF-e), com leitura automática de marca, medida, quantidade e valor.
+- Importação de planilhas (`.xlsx`/`.xls`/`.csv`) e relatórios em PDF, com tela de revisão antes de salvar.
+- Sincronização com relatórios de estoque de terceiros (PDF/Excel), reconciliando quantidades automaticamente.
+- Mesclagem automática de duplicados por marca, medida e condição.
+- Histórico de movimentações (criação, edição e exclusão) por item.
+- Login multiempresa com isolamento de dados por conta (Row Level Security).
+
+## Stack
+
+- **Frontend:** HTML, CSS e JavaScript puro, sem build step.
+- **Backend:** Node.js + Express.
+- **Banco de dados:** Supabase (PostgreSQL) com autenticação e RLS.
+
+## Estrutura
 
 ```
 controle-de-estoque/
-├── frontend/          → interface (HTML/CSS/JS puro, sem build step)
+├── frontend/
 │   ├── index.html
 │   ├── style.css
-│   ├── app.js          → toda a lógica da UI e as chamadas à API
-│   └── config.js        → URL da API (troque aqui quando publicar o backend)
+│   ├── auth.css
+│   ├── auth.js         # login, cadastro e logout via Supabase Auth
+│   ├── app.js           # CRUD de pneus, importação, filtros e histórico
+│   └── config.js         # URL da API e chaves públicas do Supabase
 │
-├── backend/            → API REST (Node.js + Express) que fala com o Supabase
+├── backend/
 │   ├── src/
 │   │   ├── server.js
 │   │   ├── supabaseClient.js
-│   │   └── routes/tires.js
+│   │   ├── middleware/auth.js
+│   │   └── routes/
+│   │       ├── tires.js
+│   │       └── history.js
 │   ├── package.json
 │   └── .env.example
 │
 └── database/
-    └── schema.sql       → script para criar a tabela no Supabase
+    ├── schema.sql
+    ├── migration_historico.sql
+    ├── migration_fornecedor.sql
+    └── migration_codigo_barras.sql
 ```
 
-O frontend **nunca** acessa o banco diretamente — ele só conversa com a API do
-backend, que por sua vez fala com o Supabase. Isso mantém a chave do banco fora
-do navegador do usuário.
+## Como rodar
 
-## Como funciona
+### 1. Banco de dados
 
-- **Cadastro/edição/exclusão** de pneus (marca, medida, quantidade, preço, condição).
-- **Ordenação automática** por aro, do R13 ao R20, agrupando os itens.
-- **Tag "recente"**: todo item novo entra marcado; some quando você clica no ✓ (marcar como visto). Filtrável pelo chip "🏷 Recentes".
-- **Tag de condição** (Novo / Usado): filtrável pelos chips "🟢 Novo" / "⚙ Usado".
-- **Entrada por XML (NF-e)**: envie o arquivo `.xml` da nota fiscal — o app lê marca (a partir da descrição do produto), medida, quantidade e valor unitário automaticamente, direto das tags `<det><prod>` do XML. Muito mais confiável que ler código de barras: o XML já traz os produtos de verdade, o código de barras/QR só traz a chave da nota.
-- **Importar planilha ou PDF**: aceita `.xlsx`/`.xls`/`.csv` (com colunas Marca, Medida, Quantidade, Preço, Condição) ou um PDF de relatório de estoque — o app tenta reconhecer Marca, Medida, Quantidade e Valor de venda automaticamente. Tanto o XML quanto a importação sempre abrem uma tela de revisão antes de salvar, para corrigir qualquer item mal interpretado.
-- **Ordenação**: por aro (R13–R20, padrão) ou por quantidade em estoque (crescente/decrescente) — útil para achar rápido o que está acabando.
-- **Selo de quantidade ímpar**: itens com quantidade ímpar (1, 3, 5...) ganham um selo vermelho "ímpar", já que pneus normalmente são vendidos em pares.
-- **Mesclagem automática de duplicados**: ao adicionar (manualmente, por XML ou por importação) um pneu com a mesma marca, medida e condição de um já cadastrado, a quantidade é somada ao item existente em vez de criar uma linha duplicada.
-- **Fornecedor e código de barras**: cada pneu pode guardar o fornecedor e o código de barras da etiqueta de fábrica; o código de barras não pode se repetir na mesma conta.
-- **Histórico de movimentações**: toda criação, edição e exclusão de pneu fica registrada (`tire_history`), com o que mudou e quando — consultável via `GET /api/history`.
-- **Sincronização com o estoque da empresa**: para quem também acompanha o estoque de uma empresa (via relatórios em PDF/Excel que ela gera), o botão "🔄 Sincronizar com a empresa" lê o relatório mais recente e reconcilia com o seu estoque assim:
-  - Se um pneu do relatório **já existe** no seu estoque (marca + medida + condição, não importa se foi cadastrado manualmente ou por uma sincronização anterior), a quantidade é **substituída** pela do relatório, e a origem desse item passa a ser **"🏢 empresa"**.
-  - Se um pneu **não aparece mais** no relatório novo *e já estava marcado como origem "empresa"*, ele é **zerado** (saiu do estoque de lá).
-  - Um pneu de origem **"local"** que não bate com nada no relatório **nunca é alterado ou zerado** por essa sincronização — só pneus que o relatório efetivamente menciona são tocados.
-  - Se você **editar manualmente** um pneu que estava marcado como "empresa", a origem dele volta para **"local"** — a partir daí, esse item passa a ser controlado por você, não mais pela próxima sincronização (até que o relatório volte a mencioná-lo, quando ele vira "empresa" de novo).
-
-## Rodando localmente
-
-### 1. Banco de dados (Supabase — gratuito)
-
-1. Crie uma conta em [supabase.com](https://supabase.com) e um novo projeto (grátis).
-2. Vá em **SQL Editor** e rode o conteúdo de [`database/schema.sql`](./database/schema.sql).
+1. Crie um projeto em [supabase.com](https://supabase.com).
+2. No **SQL Editor**, rode `database/schema.sql` e, em seguida, as migrations em `database/`.
 3. Em **Project Settings → API**, copie a **Project URL** e a **anon key**.
 
 ### 2. Backend
 
 ```bash
 cd backend
-cp .env.example .env
-# edite o .env e cole SUPABASE_URL e SUPABASE_KEY
+cp .env.example .env   # preencha SUPABASE_URL e SUPABASE_KEY
 npm install
 npm run dev
 ```
 
-A API sobe em `http://localhost:3000`. Endpoints disponíveis:
-
-| Método | Rota               | Descrição                                  |
-|--------|---------------------|---------------------------------------------|
-| GET    | `/api/tires`         | lista todos os pneus                        |
-| POST   | `/api/tires`          | cria um pneu                                |
-| POST   | `/api/tires/bulk`     | cria vários pneus de uma vez (nota fiscal)  |
-| PUT    | `/api/tires/:id`      | atualiza um pneu                            |
-| DELETE | `/api/tires/:id`      | remove um pneu                              |
-| GET    | `/api/history`        | histórico de movimentações (`?limit=`, `?tireId=`, `?from=`, `?to=`) |
+A API sobe em `http://localhost:3000`.
 
 ### 3. Frontend
-
-Não precisa de build. Basta abrir `frontend/index.html` no navegador, ou servir
-a pasta com qualquer servidor estático:
 
 ```bash
 cd frontend
 npx serve .
 ```
 
-Se o backend estiver em outro endereço (produção), atualize `frontend/config.js`.
+Atualize `frontend/config.js` com a URL da API e as chaves do Supabase.
 
-## Login e isolamento por empresa (multiempresa)
+## API
 
-Cada conta (e-mail + senha) enxerga **somente o próprio estoque** — os dados
-são isolados no nível do banco de dados (Row Level Security do Supabase), não
-apenas na tela. Mesmo que alguém tente chamar a API diretamente, só recebe os
-itens da própria conta.
+| Método | Rota              | Descrição                                                            |
+|--------|-------------------|-----------------------------------------------------------------------|
+| GET    | `/api/tires`      | lista os pneus                                                        |
+| POST   | `/api/tires`      | cria um pneu                                                           |
+| POST   | `/api/tires/bulk` | cria vários pneus de uma vez                                          |
+| PUT    | `/api/tires/:id`  | atualiza um pneu                                                       |
+| DELETE | `/api/tires/:id`  | remove um pneu                                                         |
+| GET    | `/api/history`    | histórico de movimentações (`?limit=`, `?tireId=`, `?from=`, `?to=`) |
 
-Como funciona:
+Todas as rotas exigem um token JWT do Supabase Auth no cabeçalho `Authorization`.
 
-- O login/cadastro roda direto no navegador, usando o **Supabase Auth**
-  (`frontend/auth.js`), com a chave pública (`anon key`) — é seguro expor essa
-  chave no frontend, pois ela sozinha não dá acesso aos dados.
-- Depois de logado, toda chamada à API leva um token (JWT) no cabeçalho
-  `Authorization`.
-- O backend valida esse token e cria, para aquela requisição, um cliente do
-  Supabase "carimbado" com o usuário logado (`backend/src/middleware/auth.js`
-  + `supabaseForUser`). As políticas de RLS do banco então filtram tudo
-  automaticamente por `owner_id = auth.uid()`.
+## Segurança
 
-Se você já tinha rodado o `database/schema.sql` antes (versão sem login),
-**rode o script de novo** — ele foi atualizado para adicionar a coluna
-`owner_id` e trocar a política aberta por uma restrita por usuário.
+- Autenticação obrigatória em todas as rotas da API.
+- Isolamento de dados por conta via Row Level Security no Postgres.
+- Validação de entrada no backend, independente do frontend.
+- CORS restrito por `ALLOWED_ORIGIN`, rate limiting e headers de segurança via Helmet.
 
-No Supabase, por padrão, todo cadastro pede confirmação por e-mail antes do
-primeiro login. Se quiser desativar isso para testar mais rápido: **Authentication
-→ Providers → Email → desmarque "Confirm email"**.
+## Licença
 
-## Estrutura do projeto (atualizada)
-
-```
-frontend/
-├── index.html    → telas de login/cadastro + app
-├── auth.js        → login, cadastro e logout (fala direto com o Supabase Auth)
-├── auth.css        → estilo das telas de login/cadastro
-├── app.js           → lógica do estoque: CRUD, XML de NF-e, importação de
-│                       planilha/PDF, ordenação, filtros (só roda após login)
-├── style.css
-└── config.js         → apiBase + credenciais públicas do Supabase (URL e anon key)
-
-backend/src/
-├── server.js            → helmet (segurança), CORS restrito, rate limiting
-├── supabaseClient.js    → cria um cliente Supabase por usuário logado
-├── middleware/auth.js    → valida o token e libera o acesso às rotas
-└── routes/
-    ├── tires.js           → CRUD de pneus, roda "como" o usuário da
-    │                        requisição, com validação de entrada em todos
-    │                        os campos
-    └── history.js          → consulta ao histórico de movimentações
-
-database/
-├── schema.sql                     → tabela `tires` + RLS por usuário
-├── migration_historico.sql        → tabela `tire_history`
-├── migration_fornecedor.sql       → coluna `fornecedor` em `tires`
-└── migration_codigo_barras.sql    → coluna `codigo_barras` em `tires` (única por conta)
-```
-
-Se o banco já existir de uma versão anterior, rode as migrations em
-`database/` que ainda não tiver rodado — todas são idempotentes (`if not
-exists`), então rodar de novo não faz mal.
-
-## Segurança do backend
-
-- **Autenticação obrigatória** em todas as rotas de `/api/tires` — sem token
-  válido do Supabase Auth, a API recusa a requisição.
-- **Isolamento por linha (RLS)** no banco: mesmo que alguém descubra o ID de
-  um item de outra empresa, a política do Postgres impede a leitura/edição.
-- **Validação no servidor**, não só no navegador: marca, medida (formato
-  R13–R20), quantidade (inteiro ≥ 0) e preço são conferidos de novo no
-  backend antes de qualquer escrita no banco — nunca confie só na validação
-  do frontend, qualquer um pode chamar a API diretamente.
-- **CORS restrito**: configure `ALLOWED_ORIGIN` no `.env` do backend com a
-  URL do seu frontend em produção. Sem essa variável, a API aceita chamadas
-  de qualquer origem (ok para desenvolvimento local, não recomendado em
-  produção).
-- **Rate limiting**: no máximo 300 requisições por IP a cada 15 minutos,
-  protegendo contra abuso.
-- **Helmet**: cabeçalhos HTTP de segurança padrão (proteção contra
-  clickjacking, sniffing de tipo MIME, etc.).
-- **Erros genéricos**: a API nunca devolve detalhes internos (stack trace,
-  mensagens cruas do banco) para quem chama — tudo fica só no log do
-  servidor.
-
-| Camada    | Sugestão                                  |
-|-----------|---------------------------------------------|
-| Banco     | Supabase (free tier)                        |
-| Backend   | Render ou Railway (free tier)               |
-| Frontend  | Vercel, Netlify ou GitHub Pages             |
-
-Depois de publicar o backend, atualize a `apiBase` em `frontend/config.js` para
-a URL pública dele, e configure `ALLOWED_ORIGIN` no ambiente do Render com a
-URL do seu frontend na Vercel.
-
-## Sobre colaboração no GitHub
-
-Não tenho uma conta de usuário do GitHub, então não consigo aceitar convites de
-colaborador — o Claude não tem essa identidade persistente. O fluxo recomendado
-é: você mantém o repositório, e me chama nas próximas conversas para gerar
-código, revisar PRs ou ajustar a aplicação; você aplica as mudanças e faz o
-commit/push.
-
-## Próximos passos sugeridos
-
-- Alertas de estoque baixo/zerado por marca e medida.
-- Exportar histórico e estoque para CSV/PDF.
+Projeto de uso privado.
