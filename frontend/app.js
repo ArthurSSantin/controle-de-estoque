@@ -1081,12 +1081,19 @@
 
   const XLSX_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
   const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  const JSPDF_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
+  const JSPDF_AUTOTABLE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js';
 
   async function ensureXLSX() {
     if (typeof XLSX === 'undefined') await loadScriptOnce(XLSX_CDN);
   }
   async function ensurePdfJs() {
     if (typeof pdfjsLib === 'undefined') await loadScriptOnce(PDFJS_CDN);
+  }
+  // Gera PDF (relatório de exportação) — diferente do pdf.js acima, que só lê PDF.
+  async function ensureJsPdfGenerator() {
+    if (typeof window.jspdf === 'undefined') await loadScriptOnce(JSPDF_CDN);
+    if (typeof window.jspdf.jsPDF.API.autoTable === 'undefined') await loadScriptOnce(JSPDF_AUTOTABLE_CDN);
   }
 
   function normalizeHeader(h) {
@@ -1577,6 +1584,7 @@
       Preço: t.preco || '',
       Condição: t.condicao === 'usado' ? 'Usado' : 'Novo',
       Fornecedor: t.fornecedor || '',
+      'Código de barras': t.codigoBarras || '',
       Origem: t.origem === 'empresa' ? 'Empresa' : 'Local',
       'Adicionado em': formatDate(t.addedAt),
     }));
@@ -1600,16 +1608,47 @@
   }
 
   async function exportStock() {
-    if (!tires.length) {
+    const rows = buildExportRows();
+    if (!rows.length) {
       showToast('Nada para exportar — o estoque está vazio.');
       return;
     }
     await ensureXLSX();
-    const ws = XLSX.utils.json_to_sheet(buildExportRows());
+    const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Estoque');
     const dataStr = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `estoque-pneus-${dataStr}.xlsx`);
+  }
+
+  async function exportStockPdf() {
+    const rows = buildExportRows();
+    if (!rows.length) {
+      showToast('Nada para exportar — o estoque está vazio.');
+      return;
+    }
+    await ensureJsPdfGenerator();
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const columns = Object.keys(rows[0]);
+    const body = rows.map((r) => columns.map((c) => String(r[c] ?? '')));
+
+    doc.setFontSize(14);
+    doc.text('Estoque de Pneus', 14, 16);
+    doc.setFontSize(10);
+    doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} — ${rows.length} item(ns)`, 14, 22);
+
+    doc.autoTable({
+      head: [columns],
+      body,
+      startY: 28,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [227, 167, 43] },
+    });
+
+    const dataStr = new Date().toISOString().slice(0, 10);
+    doc.save(`estoque-pneus-${dataStr}.pdf`);
   }
 
   /* =========================================================================
@@ -2045,7 +2084,12 @@
   };
 
   document.getElementById('exportBtn').onclick = () => {
-    exportStock().catch(() => showToast('Não foi possível exportar o estoque.'));
+    const format = document.getElementById('exportFormatSelect').value;
+    if (format === 'pdf') {
+      exportStockPdf().catch(() => showToast('Não foi possível gerar o PDF.'));
+    } else {
+      exportStock().catch(() => showToast('Não foi possível exportar o estoque.'));
+    }
   };
 
   document.getElementById('loadMoreBtn').onclick = loadMore;
