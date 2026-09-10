@@ -155,7 +155,6 @@
     } else if (name === 'dashboard') {
       loadAndRenderDashboard();
     } else if (name === 'exportar') {
-      renderExportColumnPicker();
       renderExportPreview();
     }
   }
@@ -1590,29 +1589,6 @@
   ];
   let exportSelectedColumns = new Set(EXPORT_COLUMNS.map((c) => c.key));
 
-  function renderExportColumnPicker() {
-    const group = document.getElementById('exportColumnsGroup');
-    group.innerHTML = EXPORT_COLUMNS.map((c) =>
-      `<button class="chip ${exportSelectedColumns.has(c.key) ? 'active' : ''}" data-col="${c.key}">${escapeHtml(c.label)}</button>`
-    ).join('');
-    group.querySelectorAll('.chip').forEach((chip) => {
-      chip.onclick = () => {
-        const key = chip.dataset.col;
-        if (exportSelectedColumns.has(key)) {
-          if (exportSelectedColumns.size === 1) {
-            showToast('Deixe pelo menos uma coluna selecionada.');
-            return;
-          }
-          exportSelectedColumns.delete(key);
-        } else {
-          exportSelectedColumns.add(key);
-        }
-        renderExportColumnPicker();
-        renderExportPreview();
-      };
-    });
-  }
-
   function buildExportRows() {
     const activeColumns = EXPORT_COLUMNS.filter((c) => exportSelectedColumns.has(c.key));
     return tires.map((t) => {
@@ -1622,21 +1598,41 @@
     });
   }
 
+  function toggleExportColumn(key) {
+    if (exportSelectedColumns.has(key)) {
+      if (exportSelectedColumns.size === 1) {
+        showToast('Deixe pelo menos uma coluna selecionada.');
+        renderExportPreview();
+        return;
+      }
+      exportSelectedColumns.delete(key);
+    } else {
+      exportSelectedColumns.add(key);
+    }
+    renderExportPreview();
+  }
+
   function renderExportPreview() {
-    const rows = buildExportRows();
+    const exportRows = buildExportRows();
     document.getElementById('exportSummary').textContent =
-      rows.length === 1 ? '1 item será exportado' : `${rows.length} itens serão exportados`;
+      exportRows.length === 1 ? '1 item será exportado' : `${exportRows.length} itens serão exportados`;
 
     const table = document.getElementById('exportPreviewTable');
-    if (!rows.length) {
-      table.innerHTML = '';
-      return;
-    }
-    const columns = Object.keys(rows[0]);
-    table.innerHTML = `
-      <thead><tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map((r) => `<tr>${columns.map((c) => `<td>${escapeHtml(r[c])}</td>`).join('')}</tr>`).join('')}</tbody>
-    `;
+    const headHtml = `<tr>${EXPORT_COLUMNS.map((c) => `
+      <th class="${exportSelectedColumns.has(c.key) ? '' : 'col-excluded'}">
+        <label><input type="checkbox" data-col="${c.key}" ${exportSelectedColumns.has(c.key) ? 'checked' : ''}> ${escapeHtml(c.label)}</label>
+      </th>`).join('')}</tr>`;
+
+    const bodyHtml = tires.length
+      ? tires.map((t) => `<tr>${EXPORT_COLUMNS.map((c) =>
+          `<td class="${exportSelectedColumns.has(c.key) ? '' : 'col-excluded'}">${escapeHtml(c.value(t))}</td>`
+        ).join('')}</tr>`).join('')
+      : `<tr><td colspan="${EXPORT_COLUMNS.length}" style="text-align:center;color:var(--ink-soft);">Nenhum item no estoque.</td></tr>`;
+
+    table.innerHTML = `<thead>${headHtml}</thead><tbody>${bodyHtml}</tbody>`;
+    table.querySelectorAll('th input[type="checkbox"]').forEach((cb) => {
+      cb.onchange = () => toggleExportColumn(cb.dataset.col);
+    });
   }
 
   async function exportStock() {
