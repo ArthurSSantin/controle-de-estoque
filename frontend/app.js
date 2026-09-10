@@ -155,6 +155,7 @@
     } else if (name === 'dashboard') {
       loadAndRenderDashboard();
     } else if (name === 'exportar') {
+      renderExportColumnPicker();
       renderExportPreview();
     }
   }
@@ -1576,18 +1577,49 @@
      10f. EXPORTAR ESTOQUE (Excel) — aba "Exportar" com pré-visualização
   ========================================================================= */
 
+  const EXPORT_COLUMNS = [
+    { key: 'marca', label: 'Marca / modelo', value: (t) => t.marca },
+    { key: 'medida', label: 'Medida', value: (t) => t.medida },
+    { key: 'quantidade', label: 'Quantidade', value: (t) => t.quantidade },
+    { key: 'preco', label: 'Preço', value: (t) => t.preco || '' },
+    { key: 'condicao', label: 'Condição', value: (t) => (t.condicao === 'usado' ? 'Usado' : 'Novo') },
+    { key: 'fornecedor', label: 'Fornecedor', value: (t) => t.fornecedor || '' },
+    { key: 'codigoBarras', label: 'Código de barras', value: (t) => t.codigoBarras || '' },
+    { key: 'origem', label: 'Origem', value: (t) => (t.origem === 'empresa' ? 'Empresa' : 'Local') },
+    { key: 'addedAt', label: 'Adicionado em', value: (t) => formatDate(t.addedAt) },
+  ];
+  let exportSelectedColumns = new Set(EXPORT_COLUMNS.map((c) => c.key));
+
+  function renderExportColumnPicker() {
+    const group = document.getElementById('exportColumnsGroup');
+    group.innerHTML = EXPORT_COLUMNS.map((c) =>
+      `<button class="chip ${exportSelectedColumns.has(c.key) ? 'active' : ''}" data-col="${c.key}">${escapeHtml(c.label)}</button>`
+    ).join('');
+    group.querySelectorAll('.chip').forEach((chip) => {
+      chip.onclick = () => {
+        const key = chip.dataset.col;
+        if (exportSelectedColumns.has(key)) {
+          if (exportSelectedColumns.size === 1) {
+            showToast('Deixe pelo menos uma coluna selecionada.');
+            return;
+          }
+          exportSelectedColumns.delete(key);
+        } else {
+          exportSelectedColumns.add(key);
+        }
+        renderExportColumnPicker();
+        renderExportPreview();
+      };
+    });
+  }
+
   function buildExportRows() {
-    return tires.map((t) => ({
-      Marca: t.marca,
-      Medida: t.medida,
-      Quantidade: t.quantidade,
-      Preço: t.preco || '',
-      Condição: t.condicao === 'usado' ? 'Usado' : 'Novo',
-      Fornecedor: t.fornecedor || '',
-      'Código de barras': t.codigoBarras || '',
-      Origem: t.origem === 'empresa' ? 'Empresa' : 'Local',
-      'Adicionado em': formatDate(t.addedAt),
-    }));
+    const activeColumns = EXPORT_COLUMNS.filter((c) => exportSelectedColumns.has(c.key));
+    return tires.map((t) => {
+      const row = {};
+      activeColumns.forEach((c) => { row[c.label] = c.value(t); });
+      return row;
+    });
   }
 
   function renderExportPreview() {
