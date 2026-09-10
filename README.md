@@ -42,6 +42,8 @@ do navegador do usuário.
 - **Ordenação**: por aro (R13–R20, padrão) ou por quantidade em estoque (crescente/decrescente) — útil para achar rápido o que está acabando.
 - **Selo de quantidade ímpar**: itens com quantidade ímpar (1, 3, 5...) ganham um selo vermelho "ímpar", já que pneus normalmente são vendidos em pares.
 - **Mesclagem automática de duplicados**: ao adicionar (manualmente, por XML ou por importação) um pneu com a mesma marca, medida e condição de um já cadastrado, a quantidade é somada ao item existente em vez de criar uma linha duplicada.
+- **Fornecedor e código de barras**: cada pneu pode guardar o fornecedor e o código de barras da etiqueta de fábrica; o código de barras não pode se repetir na mesma conta.
+- **Histórico de movimentações**: toda criação, edição e exclusão de pneu fica registrada (`tire_history`), com o que mudou e quando — consultável via `GET /api/history`.
 - **Sincronização com o estoque da empresa**: para quem também acompanha o estoque de uma empresa (via relatórios em PDF/Excel que ela gera), o botão "🔄 Sincronizar com a empresa" lê o relatório mais recente e reconcilia com o seu estoque assim:
   - Se um pneu do relatório **já existe** no seu estoque (marca + medida + condição, não importa se foi cadastrado manualmente ou por uma sincronização anterior), a quantidade é **substituída** pela do relatório, e a origem desse item passa a ser **"🏢 empresa"**.
   - Se um pneu **não aparece mais** no relatório novo *e já estava marcado como origem "empresa"*, ele é **zerado** (saiu do estoque de lá).
@@ -75,6 +77,7 @@ A API sobe em `http://localhost:3000`. Endpoints disponíveis:
 | POST   | `/api/tires/bulk`     | cria vários pneus de uma vez (nota fiscal)  |
 | PUT    | `/api/tires/:id`      | atualiza um pneu                            |
 | DELETE | `/api/tires/:id`      | remove um pneu                              |
+| GET    | `/api/history`        | histórico de movimentações (`?limit=`, `?tireId=`, `?from=`, `?to=`) |
 
 ### 3. Frontend
 
@@ -128,12 +131,25 @@ frontend/
 └── config.js         → apiBase + credenciais públicas do Supabase (URL e anon key)
 
 backend/src/
-├── server.js          → helmet (segurança), CORS restrito, rate limiting
-├── supabaseClient.js  → cria um cliente Supabase por usuário logado
-├── middleware/auth.js  → valida o token e libera o acesso às rotas
-└── routes/tires.js      → cada rota roda "como" o usuário da requisição,
-                            com validação de entrada em todos os campos
+├── server.js            → helmet (segurança), CORS restrito, rate limiting
+├── supabaseClient.js    → cria um cliente Supabase por usuário logado
+├── middleware/auth.js    → valida o token e libera o acesso às rotas
+└── routes/
+    ├── tires.js           → CRUD de pneus, roda "como" o usuário da
+    │                        requisição, com validação de entrada em todos
+    │                        os campos
+    └── history.js          → consulta ao histórico de movimentações
+
+database/
+├── schema.sql                     → tabela `tires` + RLS por usuário
+├── migration_historico.sql        → tabela `tire_history`
+├── migration_fornecedor.sql       → coluna `fornecedor` em `tires`
+└── migration_codigo_barras.sql    → coluna `codigo_barras` em `tires` (única por conta)
 ```
+
+Se o banco já existir de uma versão anterior, rode as migrations em
+`database/` que ainda não tiver rodado — todas são idempotentes (`if not
+exists`), então rodar de novo não faz mal.
 
 ## Segurança do backend
 
@@ -177,6 +193,5 @@ commit/push.
 
 ## Próximos passos sugeridos
 
-- Autenticação simples (Supabase Auth) para proteger o acesso ao estoque.
-- Restringir a política de acesso do Supabase (hoje está aberta para facilitar o desenvolvimento — ver aviso em `database/schema.sql`).
-- Histórico de movimentações (entradas/saídas) em vez de só o saldo atual.
+- Alertas de estoque baixo/zerado por marca e medida.
+- Exportar histórico e estoque para CSV/PDF.
