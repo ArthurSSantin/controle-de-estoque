@@ -1,4 +1,4 @@
-# Controle de Estoque de Pneus 🛞
+# Controle de Estoque de Pneus
 
 Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas isoladas por empresa.
 
