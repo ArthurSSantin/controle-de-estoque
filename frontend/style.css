@@ -62,7 +62,96 @@
     font-weight:500;
     margin-top:2px;
   }
-  .header-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .header-actions{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+    padding-bottom:18px;
+    border-bottom:1px solid var(--line);
+  }
+  .action-group{display:flex;flex-direction:column;gap:6px;}
+  .action-group-label{
+    font-size:10.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--ink-soft);
+  }
+  .action-group-btns{display:flex;gap:10px;flex-wrap:wrap;}
+
+  /* NAVEGAÇÃO POR ABAS */
+  .tabbar{
+    display:flex;
+    gap:4px;
+    border-bottom:2px solid var(--line);
+    margin-bottom:22px;
+    overflow-x:auto;
+  }
+  .tab{
+    border:none;
+    background:transparent;
+    cursor:pointer;
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:14px;
+    color:var(--ink-soft);
+    padding:10px 16px 12px;
+    white-space:nowrap;
+    border-bottom:2px solid transparent;
+    margin-bottom:-2px;
+    transition:color .12s ease, border-color .12s ease;
+  }
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--ink);border-bottom-color:var(--amber);}
+  .tab-panel-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px;
+    margin-bottom:22px;
+  }
+  .tab-panel-title{
+    font-family:'Oswald',sans-serif;
+    font-size:18px;
+    text-transform:uppercase;
+    letter-spacing:.02em;
+    margin:0 0 4px;
+  }
+
+  /* EXPORTAR — PRÉ-VISUALIZAÇÃO */
+  .export-preview-wrap{
+    overflow-x:auto;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--surface);
+  }
+  .export-preview{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+    white-space:nowrap;
+  }
+  .export-preview th{
+    text-align:left;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--ink-soft);
+    padding:10px 14px;
+    border-bottom:1.5px solid var(--line);
+    position:sticky;
+    top:0;
+    background:var(--surface);
+  }
+  .export-preview td{
+    padding:9px 14px;
+    border-bottom:1px solid var(--line);
+    color:var(--ink);
+  }
+  .export-preview tr:last-child td{border-bottom:none;}
   .btn{
     border:none;
     cursor:pointer;
@@ -248,6 +337,9 @@
   }
   .field select:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
   .field small{display:block;margin-top:4px;font-size:11px;color:var(--ink-soft);}
+  .field-with-btn{display:flex;gap:8px;}
+  .field-with-btn input{flex:1;}
+  .scan-inline-btn{padding:10px 12px;flex-shrink:0;}
   .chip-group{display:flex;gap:8px;flex-wrap:wrap;}
   .form-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;}
   .err{
@@ -325,7 +417,7 @@
   .import-upload label{cursor:pointer;}
   .batch-row{
     display:grid;
-    grid-template-columns:1.1fr .9fr .5fr .6fr .7fr auto;
+    grid-template-columns:1.1fr .9fr .5fr .6fr .7fr .9fr auto;
     gap:10px;
     margin-bottom:10px;
     align-items:end;
@@ -540,3 +632,131 @@
     text-align:center;
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast .undo-btn{
+    margin-left:12px;
+    background:var(--amber);
+    color:var(--amber-ink);
+    border:none;
+    border-radius:6px;
+    padding:4px 10px;
+    font-weight:700;
+    font-size:12px;
+    cursor:pointer;
+  }
+
+  /* FORNECEDOR TAG */
+  .tag-fornecedor{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    background:#EFE8DA;
+    color:#7A6A3F;
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.03em;
+    padding:2px 7px;
+    border-radius:20px;
+    text-transform:none;
+  }
+
+  /* DASHBOARD */
+  #dashboardChart{
+    display:flex;
+    align-items:flex-end;
+    gap:6px;
+    height:220px;
+    padding:10px 0 0;
+    border-bottom:1.5px solid var(--line);
+  }
+  .dash-bar-wrap{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-end;
+    height:100%;
+    gap:4px;
+  }
+  .dash-bars{
+    display:flex;
+    align-items:flex-end;
+    gap:2px;
+    height:100%;
+  }
+  .dash-bar{
+    width:10px;
+    border-radius:3px 3px 0 0;
+  }
+  .dash-bar.entrada{background:var(--green);}
+  .dash-bar.saida{background:var(--rust);}
+  .dash-bar-label{
+    font-size:10px;
+    color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+    white-space:nowrap;
+  }
+  .dash-legend{
+    display:flex;
+    gap:16px;
+    margin-top:12px;
+    font-size:12.5px;
+    color:var(--ink-soft);
+  }
+  .dash-legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dash-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+
+  /* CONFERÊNCIA POR CÂMERA */
+  .confer-layout{
+    display:grid;
+    grid-template-columns:1.1fr .9fr;
+    gap:16px;
+    margin-bottom:16px;
+  }
+  @media(max-width:800px){ .confer-layout{grid-template-columns:1fr;} }
+  .confer-cam{
+    position:relative;
+    background:#000;
+    border-radius:10px;
+    overflow:hidden;
+    aspect-ratio:4/3;
+  }
+  .confer-cam video{
+    width:100%;height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  .confer-flash{
+    position:absolute;inset:0;
+    background:var(--green);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .15s ease;
+  }
+  .confer-flash.on{opacity:.45;}
+  .confer-side{display:flex;flex-direction:column;gap:10px;min-height:0;}
+  .confer-progress{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:15px;
+    color:var(--ink);
+  }
+  .confer-progress b{font-size:20px;color:var(--green);}
+  .confer-checklist{
+    flex:1;
+    overflow-y:auto;
+    max-height:340px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .confer-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border:1px solid var(--line);
+    border-radius:7px;
+    background:#fff;
+    font-size:12.5px;
+  }
+  .confer-item.ok{border-color:var(--green);background:var(--green-bg);color:var(--green);}
+  .confer-item .mark{font-weight:700;width:16px;text-align:center;}

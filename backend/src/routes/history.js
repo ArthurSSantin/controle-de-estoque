@@ -30,16 +30,34 @@ function handleDbError(res, error) {
 }
 
 // GET /api/history — lista o histórico de movimentações do usuário logado,
-// mais recente primeiro. ?limit= controla quantas linhas voltam (padrão 200).
+// mais recente primeiro.
+// ?limit= controla quantas linhas voltam (padrão 200).
+// ?tireId= filtra por um pneu específico.
+// ?from= / ?to= filtram por período (datas ISO, ex: 2026-01-01).
 router.get('/', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || DEFAULT_LIMIT, MAX_LIMIT);
 
-    const { data, error } = await req.supabase
+    let query = req.supabase
       .from('tire_history')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
+
+    if (req.query.tireId) query = query.eq('tire_id', String(req.query.tireId));
+    if (req.query.from) {
+      const from = new Date(String(req.query.from));
+      if (!isNaN(from.getTime())) query = query.gte('created_at', from.toISOString());
+    }
+    if (req.query.to) {
+      const to = new Date(String(req.query.to));
+      if (!isNaN(to.getTime())) {
+        to.setHours(23, 59, 59, 999);
+        query = query.lte('created_at', to.toISOString());
+      }
+    }
+
+    const { data, error } = await query;
 
     if (error) return handleDbError(res, error);
     res.json(data.map(toApi));
