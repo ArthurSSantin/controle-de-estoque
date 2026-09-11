@@ -1104,10 +1104,15 @@
     return scriptLoadCache[src];
   }
 
-  const XLSX_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  // xlsx, jsPDF e o plugin de tabela ficam vendorizados em frontend/vendor/
+  // (em vez de vir de CDN) porque a exportação depende deles e um
+  // bloqueador de anúncio/DNS filtrando o CDN travava a exportação por
+  // completo, sem alternativa — servindo do próprio domínio isso não
+  // depende de nenhum host externo.
+  const XLSX_CDN = 'vendor/xlsx.full.min.js';
   const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-  const JSPDF_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js';
-  const JSPDF_AUTOTABLE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js';
+  const JSPDF_CDN = 'vendor/jspdf.umd.min.js';
+  const JSPDF_AUTOTABLE_CDN = 'vendor/jspdf.plugin.autotable.min.js';
 
   async function ensureXLSX() {
     if (typeof XLSX === 'undefined') await loadScriptOnce(XLSX_CDN);
