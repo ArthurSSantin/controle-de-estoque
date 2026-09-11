@@ -1065,14 +1065,39 @@
      inicial do app bem mais rápido.
   ========================================================================= */
 
+  const SCRIPT_LOAD_TIMEOUT_MS = 12000;
   const scriptLoadCache = {};
   function loadScriptOnce(src) {
     if (!scriptLoadCache[src]) {
       scriptLoadCache[src] = new Promise((resolve, reject) => {
+        let settled = false;
+        const fail = (err) => {
+          if (settled) return;
+          settled = true;
+          // Tira do cache pra uma próxima tentativa (ex: usuário clicando de
+          // novo depois de desativar o bloqueador) realmente tentar de novo
+          // — sem isso, uma falha aqui deixava toda tentativa futura presa
+          // numa promise já rejeitada pra sempre.
+          delete scriptLoadCache[src];
+          reject(err);
+        };
+
+        const timer = setTimeout(() => {
+          fail(new Error('A biblioteca demorou demais pra carregar. Verifique sua conexão ou desative bloqueadores de anúncio/rastreamento e tente de novo.'));
+        }, SCRIPT_LOAD_TIMEOUT_MS);
+
         const tag = document.createElement('script');
         tag.src = src;
-        tag.onload = () => resolve();
-        tag.onerror = () => reject(new Error('Não foi possível carregar uma biblioteca externa. Verifique sua conexão.'));
+        tag.onload = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        tag.onerror = () => {
+          clearTimeout(timer);
+          fail(new Error('Não foi possível carregar uma biblioteca externa. Verifique sua conexão ou desative bloqueadores de anúncio/rastreamento e tente de novo.'));
+        };
         document.head.appendChild(tag);
       });
     }
@@ -2111,12 +2136,23 @@
     loadAndRenderHistory();
   };
 
-  document.getElementById('exportBtn').onclick = () => {
+  document.getElementById('exportBtn').onclick = async () => {
+    const btn = document.getElementById('exportBtn');
     const format = document.getElementById('exportFormatSelect').value;
-    if (format === 'pdf') {
-      exportStockPdf().catch(() => showToast('Não foi possível gerar o PDF.'));
-    } else {
-      exportStock().catch(() => showToast('Não foi possível exportar o estoque.'));
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Gerando...';
+    try {
+      if (format === 'pdf') {
+        await exportStockPdf();
+      } else {
+        await exportStock();
+      }
+    } catch (e) {
+      showToast(e && e.message ? e.message : 'Não foi possível exportar o estoque.', { duration: 6000 });
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
     }
   };
 
