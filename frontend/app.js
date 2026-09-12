@@ -1463,10 +1463,12 @@
     document.getElementById('syncErr').classList.remove('show');
     document.getElementById('syncStatus').style.display = 'none';
     document.getElementById('syncFileInput').value = '';
+    resetSaveSyncBtn();
   }
 
   function closeSyncPanel() {
     syncPanel.classList.remove('open');
+    resetSaveSyncBtn();
   }
 
   /* =========================================================================
@@ -2084,8 +2086,18 @@
     }
   }
 
+  // Restaura o botão de sincronizar ao estado normal (rótulo e confirmação
+  // pendente) — chamado ao abrir/fechar o painel e após concluir a ação.
+  function resetSaveSyncBtn() {
+    const btn = document.getElementById('saveSyncBtn');
+    btn.classList.remove('confirm');
+    btn.textContent = 'Sincronizar';
+  }
+
   async function saveSync() {
     const syncErr = document.getElementById('syncErr');
+    const saveSyncBtn = document.getElementById('saveSyncBtn');
+    if (saveSyncBtn.disabled) return;
     syncErr.classList.remove('show');
 
     const items = rowsToItems('syncRows', syncErr, null, 'empresa');
@@ -2097,18 +2109,39 @@
       return;
     }
 
-    try {
-      const { createdCount, updatedCount, dedupedCount } = await syncCompanyStock(items);
-      closeSyncPanel();
-      render();
-      showToast(
-        `Estoque da empresa sincronizado: ${createdCount} novo(s), ${updatedCount} atualizado(s)` +
-        (dedupedCount ? `, ${dedupedCount} duplicado(s) mesclado(s).` : '.')
-      );
-    } catch (e) {
-      syncErr.textContent = 'Não foi possível sincronizar. Verifique sua conexão com a API.';
-      syncErr.classList.add('show');
+    // Sincronizar zera a quantidade de itens de origem "empresa" que sumiram
+    // do relatório novo — como isso é destrutivo e silencioso, avisa quantos
+    // itens seriam zerados e exige um segundo clique pra confirmar.
+    if (!saveSyncBtn.classList.contains('confirm')) {
+      const seenKeys = new Set(items.map(companyMatchKey));
+      const willZero = tires.filter((t) => t.origem === 'empresa' && !seenKeys.has(companyMatchKey(t))).length;
+      if (willZero > 0) {
+        syncErr.textContent = `${willZero} item(ns) de origem empresa não aparecem nesse relatório e serão zerados. Clique em "Confirmar sincronização" para continuar.`;
+        syncErr.classList.add('show');
+        saveSyncBtn.classList.add('confirm');
+        saveSyncBtn.textContent = 'Confirmar sincronização';
+        setTimeout(() => {
+          if (saveSyncBtn.classList.contains('confirm')) resetSaveSyncBtn();
+        }, 6000);
+        return;
+      }
     }
+    resetSaveSyncBtn();
+
+    await withButtonBusy(saveSyncBtn, 'Sincronizando...', async () => {
+      try {
+        const { createdCount, updatedCount, dedupedCount } = await syncCompanyStock(items);
+        closeSyncPanel();
+        render();
+        showToast(
+          `Estoque da empresa sincronizado: ${createdCount} novo(s), ${updatedCount} atualizado(s)` +
+          (dedupedCount ? `, ${dedupedCount} duplicado(s) mesclado(s).` : '.')
+        );
+      } catch (e) {
+        syncErr.textContent = 'Não foi possível sincronizar. Verifique sua conexão com a API.';
+        syncErr.classList.add('show');
+      }
+    });
   }
 
   /* =========================================================================
