@@ -241,6 +241,21 @@
     };
   }
 
+  // Desabilita o botão (evita clique duplo/duplo toque criando o item duas
+  // vezes) e mostra um rótulo de carregamento enquanto fn roda.
+  async function withButtonBusy(btn, busyLabel, fn) {
+    if (btn.disabled) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = busyLabel;
+    try {
+      await fn();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
   /* =========================================================================
      3b. MESCLAGEM DE ITENS DUPLICADOS
      Um pneu é considerado "o mesmo" quando marca + medida + condição batem
@@ -2104,7 +2119,8 @@
     formPanel.classList.contains('open') ? closeForm() : openAddForm();
   };
   document.getElementById('cancelBtn').onclick = closeForm;
-  document.getElementById('saveBtn').onclick = saveTire;
+  document.getElementById('saveBtn').onclick = () =>
+    withButtonBusy(document.getElementById('saveBtn'), 'Salvando...', saveTire);
 
   document.getElementById('xmlBtn').onclick = () => {
     xmlPanel.classList.contains('open') ? closeXmlPanel() : openXmlPanel();
@@ -2116,7 +2132,8 @@
   document.getElementById('rescanXmlBtn').onclick = openXmlPanel;
   document.getElementById('cancelXmlBtn').onclick = closeXmlPanel;
   document.getElementById('addXmlRowBtn').onclick = () => addBatchRow('xmlRows');
-  document.getElementById('saveXmlBtn').onclick = saveXml;
+  document.getElementById('saveXmlBtn').onclick = () =>
+    withButtonBusy(document.getElementById('saveXmlBtn'), 'Salvando...', saveXml);
 
   document.getElementById('importBtn').onclick = () => {
     importPanel.classList.contains('open') ? closeImportPanel() : openImportPanel();
@@ -2128,7 +2145,8 @@
   document.getElementById('downloadTemplateBtn').onclick = downloadTemplate;
   document.getElementById('addImportRowBtn').onclick = () => addBatchRow('importRows');
   document.getElementById('cancelImportBtn').onclick = closeImportPanel;
-  document.getElementById('saveImportBtn').onclick = saveImport;
+  document.getElementById('saveImportBtn').onclick = () =>
+    withButtonBusy(document.getElementById('saveImportBtn'), 'Salvando...', saveImport);
 
   document.getElementById('syncBtn').onclick = () => {
     syncPanel.classList.contains('open') ? closeSyncPanel() : openSyncPanel();
