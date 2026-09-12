@@ -231,6 +231,16 @@
     }[c]));
   }
 
+  // Atrasa a execução de fn até `ms` sem novas chamadas — usado na busca, pra
+  // não re-renderizar a lista inteira a cada tecla digitada.
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
+
   /* =========================================================================
      3b. MESCLAGEM DE ITENS DUPLICADOS
      Um pneu é considerado "o mesmo" quando marca + medida + condição batem
@@ -2185,9 +2195,10 @@
     if (scanOnceStream) scanOnceStream.getTracks().forEach((track) => track.stop());
   });
 
+  const debouncedSearchRender = debounce(render, 200);
   document.getElementById('searchInput').oninput = (e) => {
     searchTerm = e.target.value;
-    render();
+    debouncedSearchRender();
   };
   document.getElementById('clearSearchBtn').onclick = () => {
     searchTerm = '';
