@@ -2246,6 +2246,18 @@
     if (scanOnceStream) scanOnceStream.getTracks().forEach((track) => track.stop());
   });
 
+  // Esc fecha o painel/modal aberto no momento (o primeiro que encontrar,
+  // seguindo a mesma ordem de prioridade usada ao abrir cada um deles).
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('scanOnceModal').classList.contains('open')) return closeScanOnceModal();
+    if (conferPanel.classList.contains('open')) return closeConferPanel();
+    if (syncPanel.classList.contains('open')) return closeSyncPanel();
+    if (importPanel.classList.contains('open')) return closeImportPanel();
+    if (xmlPanel.classList.contains('open')) return closeXmlPanel();
+    if (formPanel.classList.contains('open')) return closeForm();
+  });
+
   const debouncedSearchRender = debounce(render, 200);
   document.getElementById('searchInput').oninput = (e) => {
     searchTerm = e.target.value;
