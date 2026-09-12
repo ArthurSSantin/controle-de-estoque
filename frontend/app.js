@@ -499,16 +499,20 @@
       return;
     }
 
+    // Mostra o estoque JÁ CARREGADO na tela imediatamente — a limpeza de
+    // duplicados é só uma manutenção em segundo plano, não precisa travar
+    // a tela de carregamento esperando ela terminar.
+    render();
+
     try {
       const mergedCount = await mergeExistingDuplicates();
       if (mergedCount) {
         showToast(`${mergedCount} item(ns) duplicado(s) mesclado(s) automaticamente.`);
+        render();
       }
     } catch (e) {
       console.error('Falha ao mesclar duplicados:', e);
     }
-
-    render();
   }
 
   async function loadMore() {
