@@ -2,7 +2,7 @@
 // Em desenvolvimento local, aponta para o backend rodando na sua máquina.
 // Quando publicar o backend (Render, Railway, Fly.io, etc.), troque pela URL pública dele.
 window.APP_CONFIG = {
-  apiBase: 'https://controle-de-estoque-914p.onrender.com/api',
+  apiBase: 'https://oytoeuoehoqdkhnhuuyy.supabase.co/functions/v1/api',
 
   // Mesmos dados usados no backend/.env — aqui é seguro expor, pois é a
   // chave "anon" (pública), pensada para rodar no navegador. O acesso aos

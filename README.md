@@ -16,7 +16,7 @@ Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas
 ## Stack
 
 - **Frontend:** HTML, CSS e JavaScript puro, sem build step.
-- **Backend:** Node.js + Express.
+- **Backend:** Supabase Edge Function (Deno + Hono).
 - **Banco de dados:** Supabase (PostgreSQL) com autenticação e RLS.
 
 ## Estrutura
@@ -31,16 +31,10 @@ controle-de-estoque/
 │   ├── app.js           # CRUD de pneus, importação, filtros e histórico
 │   └── config.js         # URL da API e chaves públicas do Supabase
 │
-├── backend/
-│   ├── src/
-│   │   ├── server.js
-│   │   ├── supabaseClient.js
-│   │   ├── middleware/auth.js
-│   │   └── routes/
-│   │       ├── tires.js
-│   │       └── history.js
-│   ├── package.json
-│   └── .env.example
+├── supabase/
+│   └── functions/
+│       └── api/
+│           └── index.ts  # rotas de pneus e histórico (Edge Function)
 │
 └── database/
     ├── schema.sql
@@ -57,16 +51,17 @@ controle-de-estoque/
 2. No **SQL Editor**, rode `database/schema.sql` e, em seguida, as migrations em `database/`.
 3. Em **Project Settings → API**, copie a **Project URL** e a **anon key**.
 
-### 2. Backend
+### 2. Backend (Edge Function)
 
 ```bash
-cd backend
-cp .env.example .env   # preencha SUPABASE_URL e SUPABASE_KEY
-npm install
-npm run dev
+npx supabase login
+npx supabase link --project-ref SEU_PROJECT_REF
+npx supabase functions deploy api
 ```
 
-A API sobe em `http://localhost:3000`.
+A API fica em `https://SEU_PROJECT_REF.supabase.co/functions/v1/api`.
+
+Pra rodar localmente: `npx supabase start` (sobe o stack via Docker) e depois `npx supabase functions serve api`.
 
 ### 3. Frontend
 
@@ -94,8 +89,8 @@ Todas as rotas exigem um token JWT do Supabase Auth no cabeçalho `Authorization
 
 - Autenticação obrigatória em todas as rotas da API.
 - Isolamento de dados por conta via Row Level Security no Postgres.
-- Validação de entrada no backend, independente do frontend.
-- CORS restrito por `ALLOWED_ORIGIN`, rate limiting e headers de segurança via Helmet.
+- Validação de entrada na Edge Function, independente do frontend.
+- CORS restrito por `ALLOWED_ORIGIN` (secret da function).
 
 ## Licença
 
