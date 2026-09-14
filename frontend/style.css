@@ -688,7 +688,7 @@
     max-width:90vw;
     text-align:center;
   }
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
   .toast .undo-btn{
     margin-left:12px;
     background:var(--amber);
