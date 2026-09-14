@@ -1650,9 +1650,28 @@
   ];
   let exportSelectedColumns = new Set(EXPORT_COLUMNS.map((c) => c.key));
 
+  // Chave de ordenação da medida: aro (R13-R20) > largura > perfil — a
+  // mesma noção de "tamanho" que o resto do app já usa pra agrupar por aro.
+  // Medida fora do padrão esperado vai pro final da lista.
+  function medidaSortKey(medida) {
+    const m = /^\s*(\d+)\s*\/\s*(\d+)\s*R\s*-?\s*(\d{2})/i.exec(medida || '');
+    if (!m) return [Infinity, Infinity, Infinity];
+    return [Number(m[3]), Number(m[1]), Number(m[2])];
+  }
+
+  // Ordem usada tanto no preview quanto no arquivo exportado — as duas
+  // telas têm que bater com o que realmente vai ser baixado.
+  function sortedTiresForExport() {
+    return tires.slice().sort((a, b) => {
+      const ka = medidaSortKey(a.medida);
+      const kb = medidaSortKey(b.medida);
+      return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2];
+    });
+  }
+
   function buildExportRows() {
     const activeColumns = EXPORT_COLUMNS.filter((c) => exportSelectedColumns.has(c.key));
-    return tires.map((t) => {
+    return sortedTiresForExport().map((t) => {
       const row = {};
       activeColumns.forEach((c) => { row[c.label] = c.value(t); });
       return row;
@@ -1685,7 +1704,7 @@
       </th>`).join('')}</tr>`;
 
     const bodyHtml = tires.length
-      ? tires.map((t) => `<tr>${EXPORT_COLUMNS.map((c) =>
+      ? sortedTiresForExport().map((t) => `<tr>${EXPORT_COLUMNS.map((c) =>
           `<td class="${exportSelectedColumns.has(c.key) ? '' : 'col-excluded'}">${escapeHtml(c.value(t))}</td>`
         ).join('')}</tr>`).join('')
       : `<tr><td colspan="${EXPORT_COLUMNS.length}" style="text-align:center;color:var(--ink-soft);">Nenhum item no estoque.</td></tr>`;

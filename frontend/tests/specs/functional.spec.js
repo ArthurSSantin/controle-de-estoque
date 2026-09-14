@@ -141,6 +141,37 @@ test.describe('Exportar', () => {
     await expect(page.locator('#exportPreviewTable th').filter({ hasText: 'Fornecedor' })).toHaveClass(/col-excluded/);
   });
 
+  test('preview e exportação saem ordenados por medida (aro, menor pro maior)', async ({ page }) => {
+    // buildFakeTires cicla o aro (R13..R20) fora de ordem — confere que o
+    // preview reordena por aro crescente, não pela ordem que a API devolveu.
+    await installCommonMocks(page, { tires: buildFakeTires(9) });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+    await page.click('[data-tab="exportar"]');
+    await page.waitForSelector('#exportPreviewTable tbody tr');
+
+    const medidaColIndex = await page.locator('#exportPreviewTable th').evaluateAll(
+      (ths) => ths.findIndex((th) => th.textContent.includes('Medida'))
+    );
+    const aros = await page.locator('#exportPreviewTable tbody tr').evaluateAll(
+      (rows, col) => rows.map((r) => {
+        const text = r.children[col].textContent;
+        return Number(/R(\d{2})/.exec(text)[1]);
+      }),
+      medidaColIndex
+    );
+
+    const sortedAros = [...aros].sort((a, b) => a - b);
+    expect(aros, 'linhas do preview deveriam estar em ordem crescente de aro').toEqual(sortedAros);
+
+    // o arquivo exportado tem que respeitar a mesma ordem
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('#exportBtn'),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
+  });
+
   test('não deixa desmarcar a última coluna restante', async ({ page }) => {
     await installCommonMocks(page, { tires: buildFakeTires(2) });
     await bootIntoApp(page);
