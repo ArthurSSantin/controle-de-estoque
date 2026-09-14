@@ -1650,13 +1650,12 @@
   ];
   let exportSelectedColumns = new Set(EXPORT_COLUMNS.map((c) => c.key));
 
-  // Chave de ordenação da medida: aro (R13-R20) > largura > perfil — a
-  // mesma noção de "tamanho" que o resto do app já usa pra agrupar por aro.
+  // Chave de ordenação da medida: largura > perfil > aro.
   // Medida fora do padrão esperado vai pro final da lista.
   function medidaSortKey(medida) {
     const m = /^\s*(\d+)\s*\/\s*(\d+)\s*R\s*-?\s*(\d{2})/i.exec(medida || '');
     if (!m) return [Infinity, Infinity, Infinity];
-    return [Number(m[3]), Number(m[1]), Number(m[2])];
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
   }
 
   // Ordem usada tanto no preview quanto no arquivo exportado — as duas
