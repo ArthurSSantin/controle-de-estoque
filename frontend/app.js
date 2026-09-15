@@ -296,8 +296,28 @@
    * eles. Isso cobre casos em que duas linhas iguais acabaram existindo no
    * banco (ex: uma falha ao editar que levou a criar um item novo em vez de
    * atualizar o existente).
+   *
+   * Chamada em 3 pontos diferentes (load(), commitItems(), syncCompanyStock())
+   * que podem se sobrepor no tempo. Sem essa trava, duas chamadas concorrentes
+   * liam o mesmo grupo de duplicados ANTES de qualquer uma delas terminar de
+   * atualizar o array `tires` — cada uma somava a quantidade do grupo de novo
+   * por cima do resultado da outra, inflando a quantidade final e gravando
+   * uma entrada de "entrada"/"saída" fantasma no histórico. Só uma execução
+   * por vez; uma chamada concorrente devolve 0 e deixa a que já está rodando
+   * terminar (ela enxerga o `tires` mais atualizado).
    */
+  let mergeInProgress = false;
   async function mergeExistingDuplicates() {
+    if (mergeInProgress) return 0;
+    mergeInProgress = true;
+    try {
+      return await mergeExistingDuplicatesImpl();
+    } finally {
+      mergeInProgress = false;
+    }
+  }
+
+  async function mergeExistingDuplicatesImpl() {
     const groups = {};
     tires.forEach((t) => {
       const key = matchKey(t);
