@@ -156,6 +156,54 @@ test.describe('Regressão — overflow horizontal com marca comprida', () => {
   });
 });
 
+test.describe('Regressão — merges de duplicados concorrentes', () => {
+  // Bug: mergeExistingDuplicates() é chamada em 3 pontos (load(), commitItems(),
+  // syncCompanyStock()) que podem se sobrepor no tempo (ex: usuário adiciona um
+  // pneu novo enquanto o merge automático de fundo do load() ainda não terminou
+  // de gravar no backend). Sem uma trava, as duas chamadas liam o MESMO grupo
+  // de duplicados antes de qualquer uma das duas terminar de atualizar o array
+  // `tires` — cada uma somava a quantidade do grupo de novo por cima do
+  // resultado da outra, inflando a quantidade final (ex: 4+6 devia dar 10, mas
+  // virava 16) e gravando uma entrada de "entrada"/"saída" fantasma no
+  // histórico. Corrigido com um guard de reentrância: só um merge por vez.
+  test('adicionar um pneu durante o merge de fundo não infla a quantidade mesclada', async ({ page }) => {
+    const base = { marca: 'Goodyear Duplicado', medida: '205/55 R16', condicao: 'novo', novo: false, origem: 'local' };
+    await installCommonMocks(page, {
+      tires: [
+        { id: 'x1', ...base, quantidade: 4, preco: '250,00', addedAt: Date.now() - 5000 },
+        { id: 'x2', ...base, quantidade: 6, preco: '260,00', addedAt: Date.now() - 3000 },
+      ],
+      // atraso nas escritas (PUT/DELETE) do merge automático, pra dar tempo
+      // de disparar uma 2ª ação enquanto ele ainda está "no ar" — replica o
+      // timing real de um backend hospedado longe.
+      mutationLatencyMs: 500,
+    });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    // enquanto o merge de fundo do load() ainda não terminou de gravar,
+    // adiciona um pneu novo — commitItems() dispara outro mergeExistingDuplicates().
+    await page.click('#toggleFormBtn');
+    await page.fill('#fMarca', 'Pneu Qualquer');
+    await page.fill('#fMedida', '175/70 R13');
+    await page.fill('#fQtd', '1');
+    await page.click('#saveBtn');
+
+    await page.waitForTimeout(1500); // dá tempo dos dois merges terminarem
+
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 0))); // deixa a fila de microtasks assentar
+    await page.reload();
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    const goodyearRows = await page.locator('.row', { hasText: 'Goodyear Duplicado' }).count();
+    expect(goodyearRows, 'não deveria sobrar linha duplicada do grupo mesclado').toBe(1);
+
+    const qtyText = await page.locator('.row', { hasText: 'Goodyear Duplicado' }).locator('.qty-pill').textContent();
+    expect(qtyText, 'a quantidade mesclada deveria ser exatamente a soma real (4+6=10), não inflada por um merge duplicado').toContain('10 un.');
+  });
+});
+
 test.describe('Regressão — ícone maskable do PWA', () => {
   // Bug: o ícone maskable veio com cantos arredondados transparentes e o
   // desenho colado na borda — no Android (que aplica sua própria máscara
