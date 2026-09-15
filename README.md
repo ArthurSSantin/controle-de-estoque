@@ -1,23 +1,28 @@
 # Controle de Estoque de Pneus
 
-Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas isoladas por empresa.
+Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas isoladas por empresa. Funciona como PWA — pode ser instalado no celular e continua mostrando o último estoque salvo mesmo sem internet.
 
 ## Funcionalidades
 
-- Cadastro, edição e exclusão de pneus (marca, medida, quantidade, preço, condição, fornecedor, código de barras).
-- Ordenação automática por aro (R13–R20) ou por quantidade em estoque.
+- Cadastro, edição e exclusão de pneus (marca, medida, quantidade, preço, condição, fornecedor, código de barras), com exclusão reversível ("Desfazer").
+- Ordenação automática por aro (R13–R22) ou por quantidade em estoque; busca por marca/medida e filtro por condição (novo/usado).
+- Leitura de código de barras pela câmera do celular, tanto pra cadastrar quanto pra conferir um item já existente contra o estoque digital.
 - Entrada rápida via XML de nota fiscal (NF-e), com leitura automática de marca, medida, quantidade e valor.
 - Importação de planilhas (`.xlsx`/`.xls`/`.csv`) e relatórios em PDF, com tela de revisão antes de salvar.
 - Sincronização com relatórios de estoque de terceiros (PDF/Excel), reconciliando quantidades automaticamente.
 - Mesclagem automática de duplicados por marca, medida e condição.
-- Histórico de movimentações (criação, edição e exclusão) por item.
+- Exportação do estoque para `.xlsx` ou PDF, com seleção de quais colunas incluir e ordenação automática por medida (largura → perfil → aro).
+- Histórico de movimentações (criação, edição, exclusão, entradas e saídas de quantidade) por item, com filtro por pneu e por período.
+- Dashboard com gráfico de entradas x saídas de quantidade nos últimos 14 dias.
 - Login multiempresa com isolamento de dados por conta (Row Level Security).
+- Instalável como PWA (ícone na tela inicial, abre sem barra de navegador) e com Service Worker para a casca do app continuar acessível offline.
 
 ## Stack
 
-- **Frontend:** HTML, CSS e JavaScript puro, sem build step.
+- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Bibliotecas de exportação (`xlsx`, `jsPDF`) vendorizadas em `frontend/vendor/` — a exportação não depende de nenhum CDN externo.
 - **Backend:** Supabase Edge Function (Deno + Hono).
 - **Banco de dados:** Supabase (PostgreSQL) com autenticação e RLS.
+- **Testes:** suíte end-to-end com Playwright (`frontend/tests/`), rodando automaticamente em todo push/PR via GitHub Actions.
 
 ## Estrutura
 
@@ -27,20 +32,29 @@ controle-de-estoque/
 │   ├── index.html
 │   ├── style.css
 │   ├── auth.css
-│   ├── auth.js         # login, cadastro e logout via Supabase Auth
-│   ├── app.js           # CRUD de pneus, importação, filtros e histórico
-│   └── config.js         # URL da API e chaves públicas do Supabase
+│   ├── auth.js          # login, cadastro e logout via Supabase Auth
+│   ├── app.js            # CRUD de pneus, importação, filtros, histórico, dashboard, exportação
+│   ├── config.js          # URL da API e chaves públicas do Supabase
+│   ├── manifest.json      # manifesto do PWA
+│   ├── sw.js              # Service Worker (cache da casca do app)
+│   ├── icons/             # ícones do PWA (inclusive o maskable)
+│   ├── vendor/            # xlsx e jsPDF vendorizados (exportação sem CDN)
+│   └── tests/             # suíte de testes end-to-end (Playwright) — ver frontend/tests/README.md
 │
 ├── supabase/
 │   └── functions/
 │       └── api/
 │           └── index.ts  # rotas de pneus e histórico (Edge Function)
 │
-└── database/
-    ├── schema.sql
-    ├── migration_historico.sql
-    ├── migration_fornecedor.sql
-    └── migration_codigo_barras.sql
+├── database/
+│   ├── schema.sql
+│   ├── migration_historico.sql
+│   ├── migration_fornecedor.sql
+│   └── migration_codigo_barras.sql
+│
+└── .github/
+    └── workflows/
+        └── frontend-tests.yml  # roda a suíte de testes em todo push/PR
 ```
 
 ## Como rodar
@@ -72,6 +86,17 @@ npx serve .
 
 Atualize `frontend/config.js` com a URL da API e as chaves do Supabase.
 
+### 4. Testes (opcional)
+
+```bash
+cd frontend/tests
+npm install
+npx playwright install --with-deps chromium   # só na primeira vez
+npm test
+```
+
+Detalhes de cada teste em [`frontend/tests/README.md`](frontend/tests/README.md).
+
 ## API
 
 | Método | Rota              | Descrição                                                            |
@@ -90,7 +115,7 @@ Todas as rotas exigem um token JWT do Supabase Auth no cabeçalho `Authorization
 - Autenticação obrigatória em todas as rotas da API.
 - Isolamento de dados por conta via Row Level Security no Postgres.
 - Validação de entrada na Edge Function, independente do frontend.
-- CORS restrito por `ALLOWED_ORIGIN` (secret da function).
+- CORS restrito por `ALLOWED_ORIGIN` (secret da function) — configure com o(s) domínio(s) reais do app publicado, sem barra no final.
 
 ## Licença
 
