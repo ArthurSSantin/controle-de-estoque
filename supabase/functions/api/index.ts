@@ -56,7 +56,7 @@ app.use('*', async (c, next) => {
    PNEUS
 =========================================================================== */
 
-const MEDIDA_REGEX = /R\s*-?\s*(1[3-9]|20)[A-Z]?\b/i;
+const MEDIDA_REGEX = /R\s*-?\s*(1[3-9]|2[0-2])[A-Z]?\b/i;
 const MAX_TEXT_LEN = 120;
 const TIRES_DEFAULT_LIMIT = 200;
 const TIRES_MAX_LIMIT = 500;
@@ -74,7 +74,7 @@ function validateTirePayload(body: any) {
     return { error: 'Marca inválida.' };
   }
   if (!medida || medida.length > MAX_TEXT_LEN || !MEDIDA_REGEX.test(medida)) {
-    return { error: 'Medida inválida. Informe o aro no formato R13 a R20 (ex: 185/65 R14).' };
+    return { error: 'Medida inválida. Informe o aro no formato R13 a R22 (ex: 185/65 R14).' };
   }
   if (!Number.isFinite(quantidade) || quantidade < 0 || !Number.isInteger(quantidade)) {
     return { error: 'Quantidade inválida.' };

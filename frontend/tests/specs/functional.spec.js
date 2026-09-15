@@ -22,7 +22,7 @@ test.describe('Cadastro manual', () => {
     await expect(page.locator('#content')).toContainText('Pneu de Teste E2E');
   });
 
-  test('rejeita medida sem aro válido (R13-R20)', async ({ page }) => {
+  test('rejeita medida sem aro válido (R13-R22)', async ({ page }) => {
     await installCommonMocks(page, { tires: [] });
     await bootIntoApp(page);
     await waitForContentReady(page);
@@ -33,6 +33,28 @@ test.describe('Cadastro manual', () => {
     await page.fill('#fQtd', '1');
     await page.click('#saveBtn');
 
+    await expect(page.locator('#formErr')).toBeVisible();
+    await expect(page.locator('#formPanel')).toHaveClass(/open/); // não fechou
+  });
+
+  test('aceita aros até R22 e rejeita R23 em diante', async ({ page }) => {
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    await page.click('#toggleFormBtn');
+    await page.fill('#fMarca', 'Pneu Aro Grande');
+    await page.fill('#fMedida', '265/35 R22');
+    await page.fill('#fQtd', '1');
+    await page.click('#saveBtn');
+    await expect(page.locator('#formPanel')).not.toHaveClass(/open/); // aceitou e fechou
+    await expect(page.locator('#content')).toContainText('R22');
+
+    await page.click('#toggleFormBtn');
+    await page.fill('#fMarca', 'Pneu Aro Inexistente');
+    await page.fill('#fMedida', '265/35 R23');
+    await page.fill('#fQtd', '1');
+    await page.click('#saveBtn');
     await expect(page.locator('#formErr')).toBeVisible();
     await expect(page.locator('#formPanel')).toHaveClass(/open/); // não fechou
   });
