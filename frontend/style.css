@@ -293,6 +293,8 @@
     border-radius:20px;
     cursor:pointer;
     font-family:'Inter',sans-serif;
+    max-width:100%;
+    min-width:0;
   }
   .sort-select:focus{outline:2px solid var(--amber);outline-offset:1px;}
 
@@ -724,6 +726,8 @@
     height:220px;
     padding:10px 0 0;
     border-bottom:1.5px solid var(--line);
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
   }
   .dash-bar-wrap{
     flex:1;
