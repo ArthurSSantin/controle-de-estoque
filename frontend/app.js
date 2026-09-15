@@ -195,7 +195,7 @@
   }
 
   function validMedida(medida) {
-    return /R\s*-?\s*(1[3-9]|20)[A-Z]?\b/i.test(medida || '');
+    return /R\s*-?\s*(1[3-9]|2[0-2])[A-Z]?\b/i.test(medida || '');
   }
 
   function formatPrice(v) {
@@ -692,7 +692,7 @@
       return;
     }
 
-    // Agrupa por aro (R13 -> R20), sem aro identificado por último.
+    // Agrupa por aro (R13 -> R22), sem aro identificado por último.
     const groups = {};
     list.forEach((t) => {
       const aro = parseAro(t.medida);
@@ -869,7 +869,7 @@
       return;
     }
     if (!validMedida(medida)) {
-      formErr.textContent = 'Informe o aro no formato R13 a R20 (ex: 185/65 R14).';
+      formErr.textContent = 'Informe o aro no formato R13 a R22 (ex: 185/65 R14).';
       formErr.classList.add('show');
       return;
     }
@@ -961,7 +961,7 @@
       const fornecedor = row.querySelector('.b-fornecedor').value.trim();
       if (!marca && !medida && !qtd) continue; // linha vazia, ignora
       if (!marca || !medida || qtd === '' || !validMedida(medida)) {
-        errEl.textContent = 'Verifique se todas as linhas têm marca, medida válida (R13–R20) e quantidade.';
+        errEl.textContent = 'Verifique se todas as linhas têm marca, medida válida (R13–R22) e quantidade.';
         errEl.classList.add('show');
         return null;
       }
