@@ -114,6 +114,48 @@ test.describe('Regressão — não travar a tela esperando limpeza de duplicados
   });
 });
 
+test.describe('Regressão — overflow horizontal com marca comprida', () => {
+  // Bug: o <select> de filtro do Histórico (.sort-select) não tinha
+  // max-width — com uma marca/medida comprida entre as opções, o navegador
+  // dimensionava o select pelo texto mais longo e empurrava a PÁGINA INTEIRA
+  // pra largura maior que a tela (scroll horizontal no app inteiro, não só
+  // no select). Mesma causa-raiz achada no gráfico do Dashboard (as barras
+  // de 14 dias não cabiam e não tinham overflow-x próprio). Corrigido com
+  // max-width:100%/min-width:0 no .sort-select e overflow-x:auto no
+  // #dashboardChart — os dois têm que rolar sozinhos, nunca a página toda.
+  test('Histórico e Dashboard não estouram a largura da tela com marca comprida', async ({ page }) => {
+    const longTire = {
+      id: 'long-1',
+      marca: 'Pirelli Scorpion All Terrain Plus Edição Especial Off-Road Extra Comprida',
+      medida: '265/70 R16',
+      quantidade: 4,
+      preco: '1.250,00',
+      condicao: 'novo',
+      novo: true,
+      origem: 'empresa',
+      fornecedor: null,
+      codigoBarras: null,
+      addedAt: Date.now(),
+    };
+    const state = await installCommonMocks(page, { tires: [longTire, ...buildFakeTires(5)] });
+    state.history = [
+      { id: 'h1', tireId: 'long-1', marca: longTire.marca, medida: longTire.medida, condicao: 'novo', acao: 'criado', valorNovo: '4', createdAt: Date.now() },
+    ];
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    for (const tab of ['historico', 'dashboard']) {
+      await page.click(`[data-tab="${tab}"]`);
+      await page.waitForTimeout(300);
+      const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      }));
+      expect(scrollWidth, `aba "${tab}" não deveria criar scroll horizontal na página`).toBeLessThanOrEqual(clientWidth);
+    }
+  });
+});
+
 test.describe('Regressão — ícone maskable do PWA', () => {
   // Bug: o ícone maskable veio com cantos arredondados transparentes e o
   // desenho colado na borda — no Android (que aplica sua própria máscara
