@@ -38,15 +38,25 @@
     }
   }
 
-  document.getElementById('showSignup').onclick = (e)=>{
+  const authEyebrow = document.getElementById('authEyebrow');
+  const showSignupBtn = document.getElementById('showSignup');
+  const showLoginBtn = document.getElementById('showLogin');
+
+  showSignupBtn.onclick = (e)=>{
     e.preventDefault();
     loginForm.style.display = 'none';
     signupForm.style.display = 'block';
+    showSignupBtn.classList.add('active');
+    showLoginBtn.classList.remove('active');
+    if (authEyebrow) authEyebrow.textContent = 'Comece agora';
   };
-  document.getElementById('showLogin').onclick = (e)=>{
+  showLoginBtn.onclick = (e)=>{
     e.preventDefault();
     signupForm.style.display = 'none';
     loginForm.style.display = 'block';
+    showLoginBtn.classList.add('active');
+    showSignupBtn.classList.remove('active');
+    if (authEyebrow) authEyebrow.textContent = 'Bem-vindo de volta';
   };
 
   loginForm.addEventListener('submit', async (e)=>{
