@@ -117,6 +117,8 @@ function toApi(row: any) {
     fornecedor: row.fornecedor || null,
     codigoBarras: row.codigo_barras || null,
     addedAt: row.created_at ? new Date(row.created_at).getTime() : null,
+    conferidoStatus: row.conferido_status || null,
+    conferidoEm: row.conferido_em ? new Date(row.conferido_em).getTime() : null,
   };
 }
 
@@ -262,6 +264,30 @@ app.put('/tires/:id', async (c) => {
   if (!data.length) return c.json({ error: 'item não encontrado' }, 404);
 
   await logHistory(supabase, userId, diffToHistoryEntries(oldRow, data[0]));
+  return c.json(toApi(data[0]));
+});
+
+// PUT /api/tires/:id/conferencia — marca presença/ausência na conferência de
+// estoque físico. Endpoint próprio (não o PUT genérico acima) porque não
+// exige o payload completo do pneu e não deve gerar entrada de histórico —
+// conferência é um registro de auditoria, não uma edição de item.
+app.put('/tires/:id/conferencia', async (c) => {
+  const supabase = c.get('supabase');
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const status = body?.status;
+  if (status !== 'presente' && status !== 'ausente') {
+    return c.json({ error: 'status deve ser "presente" ou "ausente"' }, 400);
+  }
+
+  const { data, error } = await supabase
+    .from('tires')
+    .update({ conferido_status: status, conferido_em: new Date().toISOString() })
+    .eq('id', id)
+    .select();
+  if (error) return dbErrorResponse(c, error);
+  if (!data.length) return c.json({ error: 'item não encontrado' }, 404);
+
   return c.json(toApi(data[0]));
 });
 

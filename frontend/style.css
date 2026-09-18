@@ -311,7 +311,7 @@
     overflow-y:auto;
   }
   .panel.open{display:flex;}
-  #scanOnceModal, #scannerModal{ z-index:260; }
+  #scanOnceModal, #scannerModal, #conferScanModal{ z-index:260; }
   .modal-card{
     background:var(--surface);
     border:1px solid var(--line);
@@ -616,6 +616,69 @@
     border-radius:20px;
     text-transform:uppercase;
   }
+  .tag-conferido{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.03em;
+    padding:2px 8px;
+    border-radius:20px;
+    text-transform:uppercase;
+  }
+  .tag-conferido.presente{background:var(--green-bg);color:var(--green);}
+  .tag-conferido.ausente{background:var(--rust-bg);color:var(--rust);border:1px solid var(--rust);}
+  .tag-conferido.pendente{background:var(--line);color:var(--ink-soft);}
+
+  /* CONFERÊNCIA DE ESTOQUE */
+  .confer-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .confer-stat{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:10px 16px;
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+  }
+  .confer-stat b{font-family:'IBM Plex Mono',monospace;font-size:18px;}
+  .confer-stat span{font-size:12px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .confer-stat.pendente b{color:var(--ink-soft);}
+  .confer-stat.presente b{color:var(--green);}
+  .confer-stat.ausente b{color:var(--rust);}
+  .confer-row{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:12px 14px;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-bottom:8px;
+    flex-wrap:wrap;
+  }
+  .confer-row.is-ausente{border-color:var(--rust);}
+  .confer-row.is-presente{border-color:var(--green);}
+  .confer-row-info{flex:1;min-width:200px;}
+  .confer-row-brand{font-weight:600;color:var(--ink);}
+  .confer-row-medida{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-soft);margin-left:8px;}
+  .confer-row-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .confer-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border:1.5px solid var(--line);
+    background:#fff;
+    color:var(--ink-soft);
+    font-weight:700;
+    font-size:12.5px;
+    padding:7px 13px;
+    border-radius:20px;
+    cursor:pointer;
+  }
+  .confer-btn.presente-btn.active{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+  .confer-btn.ausente-btn.active{background:var(--rust-bg);border-color:var(--rust);color:var(--rust);}
   .col-size{
     font-family:'IBM Plex Mono',monospace;
     font-size:13.5px;
