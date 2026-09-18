@@ -121,9 +121,60 @@
   .tab:hover{color:var(--ink);}
   .tab.active{color:var(--ink);border-bottom-color:var(--amber);}
   .tab .icon{display:none;}
+  .mobile-fab{display:none;}
 
+  /* NAV INFERIOR NO MOBILE — mesma .tabbar/.tab da sidebar desktop, só
+     reestilizada e fixada embaixo. app.js continua só olhando pra
+     `.tabbar .tab` / `data-tab`, então nada de JS muda. */
   @media(max-width:900px){
-    .app-sidebar .tabbar{flex-basis:100%;order:3;}
+    .app-sidebar .tabbar{
+      flex-basis:100%;
+      order:3;
+      position:fixed;
+      left:0;right:0;bottom:0;
+      margin:0;
+      border-bottom:none;
+      border-top:1px solid var(--line);
+      background:var(--surface);
+      padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+      justify-content:space-around;
+      gap:0;
+      z-index:50;
+      overflow:visible;
+    }
+    .app-sidebar .tabbar .tab{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:2px;
+      font-size:10.5px;
+      padding:6px 2px;
+      border-bottom:none;
+      margin-bottom:0;
+      white-space:normal;
+    }
+    .app-sidebar .tabbar .tab .icon{display:block;}
+    .app-sidebar .tabbar .tab.active{color:var(--amber);}
+    .app-main{padding-bottom:88px;}
+
+    .mobile-fab{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      position:fixed;
+      right:18px;
+      bottom:calc(78px + env(safe-area-inset-bottom));
+      width:52px;height:52px;
+      border-radius:50%;
+      border:none;
+      background:var(--amber);
+      color:var(--amber-ink);
+      box-shadow:0 4px 14px rgba(33,29,24,.28);
+      cursor:pointer;
+      z-index:55;
+    }
+    .mobile-fab .icon{width:24px;height:24px;}
   }
 
   /* sidebar fixa no desktop — mesma .tabbar/.tab, só reestilizada aqui */
