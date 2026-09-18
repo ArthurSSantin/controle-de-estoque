@@ -662,6 +662,23 @@
     border-radius:20px;
   }
 
+  .row-head{
+    display:none;
+  }
+  @media(min-width:901px){
+    .row-head{
+      display:grid;
+      grid-template-columns:1.3fr 1fr .7fr .7fr .8fr auto;
+      gap:12px;
+      padding:0 14px 8px;
+      font-size:10.5px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+      color:var(--ink-soft);
+    }
+    .row-head span:last-child{min-width:76px;}
+  }
   .row{
     background:var(--surface);
     border:1px solid var(--line);
