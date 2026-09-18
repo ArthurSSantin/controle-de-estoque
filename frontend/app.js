@@ -590,9 +590,18 @@
     const totalUnidades = tires.reduce((s, t) => s + (Number(t.quantidade) || 0), 0);
     const baixoEstoque = tires.filter((t) => (Number(t.quantidade) || 0) <= 2).length;
     statsEl.innerHTML = `
-      <div class="stat"><b>${totalItens}</b><span>Itens cadastrados</span></div>
-      <div class="stat"><b>${totalUnidades}</b><span>Unidades em estoque</span></div>
-      <div class="stat"><b>${baixoEstoque}</b><span>Com estoque baixo (≤2)</span></div>
+      <div class="stat">
+        <div class="stat-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+        <div><b>${totalItens}</b><span>Itens cadastrados</span></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+        <div><b>${totalUnidades}</b><span>Unidades em estoque</span></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon stat-icon-alert"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <div><b class="stat-alert">${baixoEstoque}</b><span>Com estoque baixo (≤2)</span></div>
+      </div>
     `;
     novoCount.textContent = tires.filter((t) => t.novo).length;
   }
@@ -621,43 +630,49 @@
     return list;
   }
 
+  const ICON_EDIT = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+  const ICON_TRASH = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+  const ICON_CHECK = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
   function tireRowHtml(t) {
     const qtd = Number(t.quantidade) || 0;
     const low = qtd <= 2;
     const isOdd = qtd % 2 !== 0;
+    const statusTags = [
+      t.novo ? `<span class="tag-novo" title="Adicionado ${timeAgo(t.addedAt)}">recente</span>` : '',
+      isOdd ? `<span class="tag-impar" title="Quantidade ímpar — sobra um pneu avulso">ímpar</span>` : '',
+      t.origem === 'empresa' ? `<span class="tag-empresa" title="Sincronizado do relatório da empresa">empresa</span>` : '',
+      t.conferidoStatus === 'presente' ? `<span class="tag-conferido presente" title="Conferido em ${escapeHtml(formatDateTime(t.conferidoEm))}">✓ conferido</span>` : '',
+      t.conferidoStatus === 'ausente' ? `<span class="tag-conferido ausente" title="Não encontrado na conferência de ${escapeHtml(formatDateTime(t.conferidoEm))}">⚠ não encontrado</span>` : '',
+    ].join('');
     return `
       <div class="row ${t.novo ? 'is-novo' : ''}" data-id="${t.id}">
         <div class="col col-brand">
-          <label class="mobile-label">Marca</label>
           ${escapeHtml(t.marca || '—')}
-          <span class="tag-cond ${t.condicao === 'usado' ? 'usado' : 'novo'}">${t.condicao === 'usado' ? 'Usado' : 'Novo'}</span>
-          ${t.novo ? `<span class="tag-novo" title="Adicionado ${timeAgo(t.addedAt)}">recente</span>` : ''}
-          ${isOdd ? `<span class="tag-impar" title="Quantidade ímpar — sobra um pneu avulso">ímpar</span>` : ''}
-          ${t.origem === 'empresa' ? `<span class="tag-empresa" title="Sincronizado do relatório da empresa">empresa</span>` : ''}
-          ${t.fornecedor ? `<span class="tag-fornecedor" title="Fornecedor">${escapeHtml(t.fornecedor)}</span>` : ''}
-          ${t.conferidoStatus === 'presente' ? `<span class="tag-conferido presente" title="Conferido em ${escapeHtml(formatDateTime(t.conferidoEm))}">✓ conferido</span>` : ''}
-          ${t.conferidoStatus === 'ausente' ? `<span class="tag-conferido ausente" title="Não encontrado na conferência de ${escapeHtml(formatDateTime(t.conferidoEm))}">⚠ não encontrado</span>` : ''}
+          ${statusTags}
         </div>
         <div class="col col-size">
-          <label class="mobile-label">Medida</label>
           ${escapeHtml(t.medida || '—')}
         </div>
-        <div class="col">
-          <label class="mobile-label">Qtd.</label>
+        <div class="col col-qty">
           <span class="qty-pill ${low ? 'low' : ''}">${qtd} un.</span>
         </div>
         <div class="col col-price">
-          <label class="mobile-label">Preço</label>
           ${formatPrice(t.preco) || '—'}
         </div>
+        <div class="col col-cond">
+          <span class="tag-cond ${t.condicao === 'usado' ? 'usado' : 'novo'}">${t.condicao === 'usado' ? 'Usado' : 'Novo'}</span>
+        </div>
+        <div class="col col-fornecedor">
+          ${t.fornecedor ? escapeHtml(t.fornecedor) : '—'}
+        </div>
         <div class="col col-date">
-          <label class="mobile-label">Adicionado em</label>
           <span title="${escapeHtml(formatDateTime(t.addedAt))}">${formatDate(t.addedAt)}</span>
         </div>
         <div class="col col-actions">
-          ${t.novo ? `<button class="icon-btn check-btn" title="Marcar como visto" data-id="${t.id}">✓</button>` : ''}
-          <button class="icon-btn edit-btn" title="Editar" data-id="${t.id}">✎</button>
-          <button class="icon-btn del-btn" title="Excluir" data-id="${t.id}">🗑</button>
+          ${t.novo ? `<button class="icon-btn check-btn" title="Marcar como visto" data-id="${t.id}">${ICON_CHECK}</button>` : ''}
+          <button class="icon-btn edit-btn" title="Editar" data-id="${t.id}">${ICON_EDIT}</button>
+          <button class="icon-btn del-btn" title="Excluir" data-id="${t.id}">${ICON_TRASH}</button>
         </div>
       </div>`;
   }
@@ -754,7 +769,7 @@
       html += `<div class="group">
         <div class="group-head">
           <div class="tire-badge"><span>${key === 'other' ? '—' : 'R' + key}</span></div>
-          <h3>${label}</h3>
+          ${key === 'other' ? `<h3>${label}</h3>` : ''}
           <span class="group-count">${items.length} ${items.length === 1 ? 'item' : 'itens'}</span>
         </div>
         ${items.map(tireRowHtml).join('')}
