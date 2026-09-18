@@ -25,16 +25,27 @@
     -webkit-font-smoothing:antialiased;
   }
   .wrap{max-width:960px;margin:0 auto;padding:28px 20px 80px;}
+  .icon{width:16px;height:16px;flex-shrink:0;}
 
-  /* HEADER */
-  .header{
+  /* APP SHELL — sidebar fixa no desktop (≥901px), cabeçalho empilhado no
+     celular. A mesma .tabbar/.tab que a aba usa pra trocar de painel vira
+     visualmente uma nav lateral no desktop só via CSS — nenhuma classe
+     nova precisa ser lida pelo app.js, que continua selecionando
+     `.tabbar .tab` normalmente. */
+  .app-shell{display:flex;flex-direction:column;}
+  .app-sidebar{
     display:flex;
+    flex-wrap:wrap;
     align-items:center;
     justify-content:space-between;
     gap:16px;
+    width:100%;
     margin-bottom:22px;
-    flex-wrap:wrap;
   }
+  .app-main{margin:0;min-width:0;width:100%;max-width:none;}
+
+  /* HEADER */
+  .header{display:contents;}
   .brand{display:flex;align-items:center;gap:12px;}
   .brand-mark{
     width:42px;height:42px;border-radius:50%;
@@ -109,6 +120,71 @@
   }
   .tab:hover{color:var(--ink);}
   .tab.active{color:var(--ink);border-bottom-color:var(--amber);}
+  .tab .icon{display:none;}
+
+  @media(max-width:900px){
+    .app-sidebar .tabbar{flex-basis:100%;order:3;}
+  }
+
+  /* sidebar fixa no desktop — mesma .tabbar/.tab, só reestilizada aqui */
+  @media(min-width:901px){
+    .app-shell{flex-direction:row;align-items:flex-start;}
+    .app-sidebar{
+      flex-direction:column;
+      flex-wrap:nowrap;
+      align-items:stretch;
+      justify-content:space-between;
+      position:fixed;
+      left:0;top:0;bottom:0;
+      width:240px;
+      background:var(--rubber);
+      padding:28px 20px;
+      overflow-y:auto;
+      gap:0;
+      margin-bottom:0;
+      z-index:10;
+    }
+    .app-sidebar .brand{padding:0 8px 28px;}
+    .app-sidebar .brand h1{color:var(--surface);font-size:14.5px;}
+    .app-sidebar .brand span{color:#9C9488;}
+    .app-sidebar .brand-mark{width:38px;height:38px;}
+    .app-sidebar .brand-mark::after{width:12px;height:12px;}
+    .app-sidebar .tabbar{
+      flex-direction:column;
+      gap:4px;
+      border-bottom:none;
+      margin-bottom:0;
+      overflow:visible;
+    }
+    .app-sidebar .tab{
+      display:flex;align-items:center;gap:12px;
+      padding:11px 12px;border-radius:8px;
+      color:#B9B2A4;
+      white-space:normal;
+      border-bottom:none;
+      margin-bottom:0;
+      text-align:left;
+      font-size:13.5px;
+    }
+    .app-sidebar .tab .icon{display:block;}
+    .app-sidebar .tab:hover{background:rgba(255,255,255,.06);color:#B9B2A4;}
+    .app-sidebar .tab.active{background:rgba(227,167,43,.14);color:var(--amber);border-bottom:none;font-weight:700;}
+    .app-sidebar .user-bar{
+      flex-direction:column;
+      align-items:flex-start;
+      gap:10px;
+      padding-top:16px;
+      margin-top:16px;
+      border-top:1px solid #3A352D;
+    }
+    .app-sidebar .user-bar span{color:#B9B2A4;font-size:12.5px;}
+    .app-sidebar .user-bar b{color:#DCD6C9;}
+    .app-sidebar .user-bar .btn-ghost{border-color:#4A443B;color:#B9B2A4;background:transparent;}
+    .app-sidebar .user-bar .btn-ghost:hover{border-color:#6B655A;color:var(--surface);}
+
+    .app-main{margin-left:240px;max-width:1180px;padding:36px 44px 80px;}
+  }
+
   .tab-panel-card{
     background:var(--surface);
     border:1px solid var(--line);
@@ -170,6 +246,9 @@
   .export-preview .col-excluded{opacity:.35;}
   .export-preview td.col-excluded{text-decoration:line-through;}
   .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
     border:none;
     cursor:pointer;
     font-family:'Inter',sans-serif;
@@ -276,6 +355,7 @@
     border-color:var(--amber);
     color:var(--amber-ink);
   }
+  .dot-green{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;}
   .chip .badge-count{
     background:rgba(0,0,0,.12);
     padding:1px 7px;

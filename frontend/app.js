@@ -633,7 +633,7 @@
           <span class="tag-cond ${t.condicao === 'usado' ? 'usado' : 'novo'}">${t.condicao === 'usado' ? 'Usado' : 'Novo'}</span>
           ${t.novo ? `<span class="tag-novo" title="Adicionado ${timeAgo(t.addedAt)}">recente</span>` : ''}
           ${isOdd ? `<span class="tag-impar" title="Quantidade ímpar — sobra um pneu avulso">ímpar</span>` : ''}
-          ${t.origem === 'empresa' ? `<span class="tag-empresa" title="Sincronizado do relatório da empresa">🏢 empresa</span>` : ''}
+          ${t.origem === 'empresa' ? `<span class="tag-empresa" title="Sincronizado do relatório da empresa">empresa</span>` : ''}
           ${t.fornecedor ? `<span class="tag-fornecedor" title="Fornecedor">${escapeHtml(t.fornecedor)}</span>` : ''}
           ${t.conferidoStatus === 'presente' ? `<span class="tag-conferido presente" title="Conferido em ${escapeHtml(formatDateTime(t.conferidoEm))}">✓ conferido</span>` : ''}
           ${t.conferidoStatus === 'ausente' ? `<span class="tag-conferido ausente" title="Não encontrado na conferência de ${escapeHtml(formatDateTime(t.conferidoEm))}">⚠ não encontrado</span>` : ''}
@@ -1514,11 +1514,11 @@
   ========================================================================= */
 
   const HISTORY_ACAO_LABEL = {
-    criado: '🆕 Criado',
-    editado: '✏️ Editado',
-    excluido: '🗑️ Excluído',
-    entrada: '⬆️ Entrada',
-    saida: '⬇️ Saída',
+    criado: 'Criado',
+    editado: 'Editado',
+    excluido: 'Excluído',
+    entrada: 'Entrada',
+    saida: 'Saída',
   };
 
   const HISTORY_CAMPO_LABEL = {
