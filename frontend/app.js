@@ -62,6 +62,15 @@
       });
       if (!res.ok) throw new Error('Falha ao excluir item');
     },
+    async conferencia(id, status) {
+      const res = await fetch(`${API_BASE}/tires/${id}/conferencia`, {
+        method: 'PUT',
+        headers: await authHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error((await safeErr(res)) || 'Falha ao registrar conferência');
+      return res.json();
+    },
     async history(limit, filters) {
       const params = new URLSearchParams();
       if (limit) params.set('limit', limit);
@@ -133,6 +142,7 @@
     historico: document.getElementById('tabHistorico'),
     dashboard: document.getElementById('tabDashboard'),
     exportar: document.getElementById('tabExportar'),
+    conferencia: document.getElementById('tabConferencia'),
   };
   let activeTab = 'estoque';
 
@@ -156,6 +166,8 @@
       loadAndRenderDashboard();
     } else if (name === 'exportar') {
       renderExportPreview();
+    } else if (name === 'conferencia') {
+      loadAndRenderConferencia();
     }
   }
 
@@ -593,6 +605,10 @@
       const q = searchTerm.toLowerCase();
       if (q === 'novo' || q === 'novos' || q === 'tag:novo') {
         list = list.filter((t) => t.novo);
+      } else if (q === 'ausente' || q === 'ausentes' || q === 'não encontrado' || q === 'nao encontrado' || q === 'tag:ausente') {
+        list = list.filter((t) => t.conferidoStatus === 'ausente');
+      } else if (q === 'presente' || q === 'presentes' || q === 'conferido' || q === 'conferidos' || q === 'tag:presente') {
+        list = list.filter((t) => t.conferidoStatus === 'presente');
       } else {
         list = list.filter(
           (t) =>
@@ -619,6 +635,8 @@
           ${isOdd ? `<span class="tag-impar" title="Quantidade ímpar — sobra um pneu avulso">ímpar</span>` : ''}
           ${t.origem === 'empresa' ? `<span class="tag-empresa" title="Sincronizado do relatório da empresa">🏢 empresa</span>` : ''}
           ${t.fornecedor ? `<span class="tag-fornecedor" title="Fornecedor">${escapeHtml(t.fornecedor)}</span>` : ''}
+          ${t.conferidoStatus === 'presente' ? `<span class="tag-conferido presente" title="Conferido em ${escapeHtml(formatDateTime(t.conferidoEm))}">✓ conferido</span>` : ''}
+          ${t.conferidoStatus === 'ausente' ? `<span class="tag-conferido ausente" title="Não encontrado na conferência de ${escapeHtml(formatDateTime(t.conferidoEm))}">⚠ não encontrado</span>` : ''}
         </div>
         <div class="col col-size">
           <label class="mobile-label">Medida</label>
@@ -1654,6 +1672,210 @@
   }
 
   /* =========================================================================
+     10e2. CONFERÊNCIA DE ESTOQUE
+     Confronta o estoque físico com o digital: cada pneu é marcado como
+     "presente" (escaneado ou confirmado manualmente) ou "ausente" (não
+     encontrado fisicamente) — não mexe em quantidade, só registra presença.
+  ========================================================================= */
+
+  let conferSearchTerm = '';
+
+  // Garante que a conferência opere sobre TODO o estoque, não só a 1ª
+  // página já carregada em memória (a lista principal pagina de 200 em 200).
+  async function ensureAllTiresLoaded() {
+    while (tires.length < tiresTotal) {
+      try {
+        const page = await api.list(tiresOffset, TIRES_PAGE_SIZE);
+        if (!page.items.length) break;
+        tires.push(...page.items);
+        tiresTotal = page.total;
+        tiresOffset += page.items.length;
+      } catch (e) {
+        break; // segue com o que já foi carregado até aqui
+      }
+    }
+  }
+
+  function applyConferFilter(list) {
+    if (!conferSearchTerm) return list;
+    const q = conferSearchTerm.toLowerCase();
+    return list.filter(
+      (t) => (t.marca || '').toLowerCase().includes(q) || (t.medida || '').toLowerCase().includes(q)
+    );
+  }
+
+  function conferRowHtml(t) {
+    const status = t.conferidoStatus || null;
+    let tagHtml = '<span class="tag-conferido pendente">pendente</span>';
+    if (status === 'presente') {
+      tagHtml = `<span class="tag-conferido presente">✓ conferido em ${escapeHtml(formatDateTime(t.conferidoEm))}</span>`;
+    } else if (status === 'ausente') {
+      tagHtml = `<span class="tag-conferido ausente" title="Marcado como não encontrado — pode ser buscado com a palavra 'ausente'">⚠ não encontrado</span>`;
+    }
+    return `
+      <div class="confer-row ${status === 'presente' ? 'is-presente' : ''} ${status === 'ausente' ? 'is-ausente' : ''}" data-id="${t.id}">
+        <div class="confer-row-info">
+          <span class="confer-row-brand">${escapeHtml(t.marca || '—')}</span>
+          <span class="confer-row-medida">${escapeHtml(t.medida || '—')}</span>
+          <span class="qty-pill">${Number(t.quantidade) || 0} un.</span>
+          ${tagHtml}
+        </div>
+        <div class="confer-row-actions">
+          <button class="confer-btn presente-btn ${status === 'presente' ? 'active' : ''}" data-id="${t.id}" data-status="presente">✓ Presente</button>
+          <button class="confer-btn ausente-btn ${status === 'ausente' ? 'active' : ''}" data-id="${t.id}" data-status="ausente">✕ Ausente</button>
+        </div>
+      </div>`;
+  }
+
+  function renderConferStats(list) {
+    const presentes = list.filter((t) => t.conferidoStatus === 'presente').length;
+    const ausentes = list.filter((t) => t.conferidoStatus === 'ausente').length;
+    const pendentes = list.length - presentes - ausentes;
+    document.getElementById('conferStats').innerHTML = `
+      <div class="confer-stat pendente"><b>${pendentes}</b><span>Pendentes</span></div>
+      <div class="confer-stat presente"><b>${presentes}</b><span>Presentes</span></div>
+      <div class="confer-stat ausente"><b>${ausentes}</b><span>Ausentes</span></div>
+    `;
+  }
+
+  function bindConferRowActions() {
+    document.querySelectorAll('#conferList .confer-btn').forEach((btn) => {
+      btn.onclick = () => markConferencia(btn.dataset.id, btn.dataset.status);
+    });
+  }
+
+  async function loadAndRenderConferencia() {
+    const listEl = document.getElementById('conferList');
+    listEl.innerHTML = '<div class="loading">Carregando estoque...</div>';
+    await ensureAllTiresLoaded();
+
+    renderConferStats(tires);
+
+    const filtered = applyConferFilter(tires.slice())
+      .sort((a, b) => (a.marca || '').localeCompare(b.marca || '', 'pt-BR'));
+
+    if (!filtered.length) {
+      listEl.innerHTML = `<div class="empty"><h3>Nada encontrado</h3><p>Nenhum item corresponde à busca atual.</p></div>`;
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(conferRowHtml).join('');
+    bindConferRowActions();
+  }
+
+  async function markConferencia(id, status) {
+    const t = tires.find((x) => x.id === id);
+    if (!t) return;
+    try {
+      const updated = await api.conferencia(id, status);
+      Object.assign(t, updated);
+      if (activeTab === 'conferencia') loadAndRenderConferencia();
+      render();
+    } catch (e) {
+      showToast(e.message || 'Não foi possível registrar a conferência. Verifique sua conexão com a API.');
+    }
+  }
+
+  /* =========================================================================
+     10e3. ESCANEAMENTO CONTÍNUO DA CONFERÊNCIA
+     Diferente da verificação avulsa (que fecha a câmera a cada leitura),
+     aqui cada código lido marca o pneu como "presente" na hora e a câmera
+     continua aberta — pensado pra conferir vários pneus em sequência.
+  ========================================================================= */
+
+  let conferScanStream = null;
+  let conferScanRafId = null;
+  let conferScanReader = null;
+  let conferScanBusy = false;
+
+  function flashConferScanCam() {
+    const flash = document.getElementById('conferScanFlash');
+    flash.classList.add('on');
+    setTimeout(() => flash.classList.remove('on'), 200);
+  }
+
+  async function openConferScanModal() {
+    closeScanFlow();
+    closeScanOnceModal();
+    document.getElementById('conferScanModal').classList.add('open');
+
+    const statusEl = document.getElementById('conferScanStatus');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Carregando leitor...';
+
+    try {
+      conferScanReader = await createCodeReader();
+      statusEl.textContent = 'Solicitando acesso à câmera...';
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Este navegador não tem suporte a câmera (precisa de HTTPS ou localhost).');
+      }
+
+      conferScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = document.getElementById('conferScanVideo');
+      video.srcObject = conferScanStream;
+      await video.play();
+
+      statusEl.style.display = 'none';
+      conferScanBusy = false;
+      conferScanRafId = requestAnimationFrame(conferScanLoop);
+    } catch (err) {
+      statusEl.style.display = 'block';
+      statusEl.textContent = err.message || 'Não foi possível acessar a câmera.';
+    }
+  }
+
+  function closeConferScanModal() {
+    document.getElementById('conferScanModal').classList.remove('open');
+    if (conferScanRafId) {
+      cancelAnimationFrame(conferScanRafId);
+      conferScanRafId = null;
+    }
+    if (conferScanStream) {
+      conferScanStream.getTracks().forEach((track) => track.stop());
+      conferScanStream = null;
+    }
+  }
+
+  async function conferScanLoop() {
+    const video = document.getElementById('conferScanVideo');
+    const canvas = document.getElementById('conferScanCanvas');
+    if (!conferScanStream) return;
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA && !conferScanBusy) {
+      conferScanBusy = true;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      const text = await conferScanReader(canvas);
+
+      if (text) {
+        flashConferScanCam();
+        const statusEl = document.getElementById('conferScanStatus');
+        const tire = findTireByScannedCode(text.trim());
+        if (tire) {
+          await markConferencia(tire.id, 'presente');
+          statusEl.style.display = 'block';
+          statusEl.textContent = `✓ ${tire.marca} ${tire.medida} — marcado como presente.`;
+        } else {
+          statusEl.style.display = 'block';
+          statusEl.textContent = 'Código não encontrado no estoque.';
+        }
+        setTimeout(() => { statusEl.style.display = 'none'; }, 1800);
+        // pausa breve pra não reler o mesmo código repetidas vezes antes do
+        // usuário mover a câmera pro próximo pneu.
+        setTimeout(() => {
+          conferScanBusy = false;
+          conferScanRafId = requestAnimationFrame(conferScanLoop);
+        }, 1200);
+        return;
+      }
+      conferScanBusy = false;
+    }
+    conferScanRafId = requestAnimationFrame(conferScanLoop);
+  }
+
+  /* =========================================================================
      10f. EXPORTAR ESTOQUE (Excel) — aba "Exportar" com pré-visualização
   ========================================================================= */
 
@@ -1938,6 +2160,7 @@
     closeSyncPanel();
     closeScanOnceModal();
     closeStickerModal();
+    closeConferScanModal();
     scannerModal.classList.add('open');
 
     const statusEl = document.getElementById('scannerStatus');
@@ -2096,6 +2319,7 @@
   function closeScanFlow() {
     closeScannerModal();
     closeStickerModal();
+    closeConferScanModal();
   }
 
   async function handleSyncUpload(file) {
@@ -2279,9 +2503,18 @@
   document.getElementById('scanCodigoBtn').onclick = openScanOnceModal;
   document.getElementById('cancelScanOnceBtn').onclick = closeScanOnceModal;
 
+  document.getElementById('conferScanBtn').onclick = openConferScanModal;
+  document.getElementById('cancelConferScanBtn').onclick = closeConferScanModal;
+  const debouncedConferRender = debounce(loadAndRenderConferencia, 200);
+  document.getElementById('conferSearchInput').oninput = (e) => {
+    conferSearchTerm = e.target.value;
+    debouncedConferRender();
+  };
+
   window.addEventListener('beforeunload', () => {
     if (scannerStream) scannerStream.getTracks().forEach((track) => track.stop());
     if (scanOnceStream) scanOnceStream.getTracks().forEach((track) => track.stop());
+    if (conferScanStream) conferScanStream.getTracks().forEach((track) => track.stop());
   });
 
   // Esc fecha o painel/modal aberto no momento (o primeiro que encontrar,
@@ -2289,7 +2522,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.getElementById('scanOnceModal').classList.contains('open')) return closeScanOnceModal();
-    if (conferPanel.classList.contains('open')) return closeConferPanel();
+    if (document.getElementById('conferScanModal').classList.contains('open')) return closeConferScanModal();
     if (syncPanel.classList.contains('open')) return closeSyncPanel();
     if (importPanel.classList.contains('open')) return closeImportPanel();
     if (xmlPanel.classList.contains('open')) return closeXmlPanel();
@@ -2333,6 +2566,7 @@
     scanOnceModal: closeScanOnceModal,
     scannerModal: closeScannerModal,
     stickerModal: closeStickerModal,
+    conferScanModal: closeConferScanModal,
   };
   Object.keys(MODAL_CLOSERS).forEach((id) => {
     const el = document.getElementById(id);

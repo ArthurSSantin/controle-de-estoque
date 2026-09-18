@@ -108,6 +108,7 @@
     <button class="tab" role="tab" aria-selected="false" aria-controls="tabHistorico" data-tab="historico">📜 Histórico</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="tabDashboard" data-tab="dashboard">📈 Dashboard</button>
     <button class="tab" role="tab" aria-selected="false" aria-controls="tabExportar" data-tab="exportar">📤 Exportar</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="tabConferencia" data-tab="conferencia">📋 Conferência</button>
   </div>
 
   <!-- ================= ABA: ESTOQUE ================= -->
@@ -370,6 +371,28 @@
 
   </div><!-- /tabEstoque -->
 
+  <!-- ESCANEAMENTO CONTÍNUO DA CONFERÊNCIA (cada leitura marca "presente" e
+       continua escaneando, sem fechar — pensado pra conferir vários pneus
+       em sequência). Fica FORA das abas de propósito: é usado a partir da
+       aba Conferência, que não é a #tabEstoque onde os outros modais vivem
+       (se ficasse lá dentro, o atributo `hidden` da aba escondia o modal
+       mesmo com a classe "open" aplicada). -->
+  <div class="panel" id="conferScanModal">
+   <div class="modal-card">
+    <h2>Escanear conferência</h2>
+    <p class="sub">Aponte a câmera pro código de barras — cada leitura marca o pneu como presente e continua escaneando.</p>
+    <div class="confer-cam" style="max-width:360px;margin:0 auto 14px;">
+      <video id="conferScanVideo" playsinline muted></video>
+      <canvas id="conferScanCanvas" style="display:none;"></canvas>
+      <div id="conferScanFlash" class="confer-flash"></div>
+    </div>
+    <div id="conferScanStatus" class="scan-hint"></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="cancelConferScanBtn">Fechar</button>
+    </div>
+   </div>
+  </div>
+
   <!-- ================= ABA: HISTÓRICO ================= -->
   <div class="tab-panel tab-panel-card" id="tabHistorico" role="tabpanel" hidden>
     <h2 class="tab-panel-title">Histórico de movimentações</h2>
@@ -414,6 +437,26 @@
     <div class="export-preview-wrap">
       <table class="export-preview" id="exportPreviewTable"></table>
     </div>
+  </div>
+
+  <!-- ================= ABA: CONFERÊNCIA DE ESTOQUE ================= -->
+  <div class="tab-panel tab-panel-card" id="tabConferencia" role="tabpanel" hidden>
+    <h2 class="tab-panel-title">Conferência de estoque</h2>
+    <p class="sub">
+      Confira o estoque físico contra o digital: escaneie o código de barras de cada pneu ou confirme
+      manualmente. Itens não encontrados ficam marcados com uma tag que você pode buscar depois.
+    </p>
+
+    <div class="confer-stats" id="conferStats"></div>
+
+    <div class="toolbar">
+      <div class="search">
+        <input type="text" id="conferSearchInput" placeholder="Buscar por marca ou medida...">
+      </div>
+      <button class="btn btn-primary" id="conferScanBtn">📷 Escanear</button>
+    </div>
+
+    <div id="conferList"></div>
   </div>
 
 </div>

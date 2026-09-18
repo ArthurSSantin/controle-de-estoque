@@ -122,6 +122,16 @@ async function installCommonMocks(page, {
       return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(created) });
     }
 
+    // PUT /api/tires/:id/conferencia — marca presença/ausência na conferência
+    if (method === 'PUT' && tail.length === 2 && tail[1] === 'conferencia') {
+      const id = tail[0];
+      const body = req.postDataJSON();
+      const idx = state.tires.findIndex((t) => t.id === id);
+      if (idx < 0) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'item não encontrado' }) });
+      state.tires[idx] = { ...state.tires[idx], conferidoStatus: body.status, conferidoEm: Date.now() };
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state.tires[idx]) });
+    }
+
     // PUT /api/tires/:id — atualiza
     if (method === 'PUT' && tail.length === 1) {
       const id = tail[0];
