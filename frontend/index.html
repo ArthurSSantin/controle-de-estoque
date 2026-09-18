@@ -153,6 +153,9 @@
   <!-- ================= ABA: ESTOQUE ================= -->
   <div class="tab-panel" id="tabEstoque" role="tabpanel">
 
+  <h2 class="page-title">Estoque</h2>
+  <p class="page-sub" id="estoqueSummary"></p>
+
   <div class="stats" id="stats"></div>
 
   <div class="toolbar">
@@ -472,11 +475,10 @@
   </div>
 
   <!-- ================= ABA: HISTÓRICO ================= -->
-  <div class="tab-panel tab-panel-card" id="tabHistorico" role="tabpanel" hidden>
-    <h2 class="tab-panel-title">Histórico de movimentações</h2>
-    <p class="sub">
-      Entradas e saídas de quantidade, criações, exclusões e edições de marca/medida/preço —
-      mais recente primeiro.
+  <div class="tab-panel" id="tabHistorico" role="tabpanel" hidden>
+    <h2 class="page-title">Histórico</h2>
+    <p class="page-sub">
+      Entradas, saídas, criações, edições e exclusões — mais recente primeiro.
     </p>
     <div class="toolbar" style="margin-bottom:14px;">
       <select id="historyTireFilter" class="sort-select">
@@ -487,15 +489,19 @@
       <button class="btn btn-ghost" id="historyFilterClearBtn">Limpar filtro</button>
     </div>
     <div id="historyStatus" class="scan-hint" style="display:none;"></div>
-    <div id="historyList"></div>
+    <div class="table-card"><div id="historyList"></div></div>
   </div>
 
   <!-- ================= ABA: DASHBOARD ================= -->
-  <div class="tab-panel tab-panel-card" id="tabDashboard" role="tabpanel" hidden>
-    <h2 class="tab-panel-title">Dashboard de movimentações</h2>
-    <p class="sub">Entradas e saídas de quantidade nos últimos 14 dias.</p>
-    <div id="dashboardStatus" class="scan-hint" style="display:none;"></div>
-    <div id="dashboardChart"></div>
+  <div class="tab-panel" id="tabDashboard" role="tabpanel" hidden>
+    <h2 class="page-title">Dashboard</h2>
+    <p class="page-sub">Entradas e saídas de quantidade nos últimos 14 dias.</p>
+    <div class="stats" id="dashboardKpis"></div>
+    <div class="tab-panel-card">
+      <div class="chart-card-title">Movimentação diária</div>
+      <div id="dashboardStatus" class="scan-hint" style="display:none;"></div>
+      <div id="dashboardChart"></div>
+    </div>
   </div>
 
   <!-- ================= ABA: EXPORTAR ================= -->
