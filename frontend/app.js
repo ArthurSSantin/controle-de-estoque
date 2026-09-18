@@ -2413,6 +2413,9 @@
   document.getElementById('toggleFormBtn').onclick = () => {
     formPanel.classList.contains('open') ? closeForm() : openAddForm();
   };
+  document.getElementById('mobileFabBtn').onclick = () => {
+    formPanel.classList.contains('open') ? closeForm() : openAddForm();
+  };
   document.getElementById('cancelBtn').onclick = closeForm;
   document.getElementById('saveBtn').onclick = () =>
     withButtonBusy(document.getElementById('saveBtn'), 'Salvando...', saveTire);
