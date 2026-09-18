@@ -15,6 +15,8 @@
     --green: #4B7A51;
     --green-bg: #E4EDE2;
     --radius: 10px;
+    --surface-tint: #F7F3EA;
+    --surface-tint-2: #F1ECE1;
   }
   *{box-sizing:border-box;}
   body{
@@ -341,19 +343,35 @@
     border:1px solid var(--line);
     border-radius:var(--radius);
     padding:14px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
   }
+  .stat-icon{
+    width:32px;height:32px;
+    border-radius:9px;
+    background:var(--bg);
+    color:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;
+  }
+  .stat-icon-alert{background:var(--rust-bg);color:var(--rust);}
   .stat b{
     display:block;
     font-family:'IBM Plex Mono',monospace;
     font-size:22px;
     line-height:1.1;
   }
+  .stat b.stat-alert{color:var(--rust);}
   .stat span{
     font-size:12px;
     color:var(--ink-soft);
     font-weight:600;
-    text-transform:uppercase;
-    letter-spacing:.04em;
+    margin-top:2px;
+  }
+  @media(min-width:901px){
+    .stat-icon{width:36px;height:36px;}
+    .stat b{font-size:26px;}
   }
 
   /* SEARCH BAR */
@@ -380,12 +398,11 @@
     color:var(--ink);
   }
   .search input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
-  .search::before{
-    content:"⚲";
+  .search-icon{
     position:absolute;
-    left:13px;top:50%;transform:translateY(-50%) scaleX(-1);
+    left:13px;top:50%;transform:translateY(-50%);
     color:var(--ink-soft);
-    font-size:15px;
+    pointer-events:none;
   }
   .chip{
     display:inline-flex;
@@ -624,26 +641,26 @@
   .batch-row .rm:hover{border-color:var(--rust);color:var(--rust);background:var(--rust-bg);}
 
   /* GROUPS */
-  .group{margin-bottom:20px;}
+  .table-card{background:transparent;}
+  .group{margin-bottom:14px;}
   .group-head{
     display:flex;
     align-items:center;
-    gap:12px;
-    margin-bottom:10px;
+    gap:10px;
+    margin:2px 0;
   }
   .tire-badge{
-    width:48px;height:48px;
+    width:22px;height:22px;
     border-radius:50%;
     background:var(--rubber);
-    border:3px dashed #55504A;
     display:flex;align-items:center;justify-content:center;
     flex-shrink:0;
   }
   .tire-badge span{
     font-family:'IBM Plex Mono',monospace;
-    font-weight:600;
-    font-size:12.5px;
-    color:#F2EEE4;
+    font-weight:700;
+    font-size:8.5px;
+    color:#FBF9F5;
     letter-spacing:.01em;
   }
   .group-head h3{
@@ -657,68 +674,90 @@
     font-size:12px;
     color:var(--ink-soft);
     font-weight:600;
-    background:var(--line);
-    padding:2px 9px;
-    border-radius:20px;
   }
 
   .row-head{
     display:none;
   }
+  .row{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px;
+    display:grid;
+    grid-template-columns:1fr auto;
+    grid-template-areas:
+      "brand qty"
+      "size price"
+      "fornecedor actions";
+    row-gap:10px;
+    column-gap:10px;
+    align-items:start;
+    margin-bottom:10px;
+    position:relative;
+  }
+  .row.is-novo{border-color:var(--amber);border-width:1.5px;}
+  .col-brand{grid-area:brand;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .col-size{grid-area:size;border-top:1px solid var(--bg);padding-top:10px;}
+  .col-qty{grid-area:qty;justify-self:end;}
+  .col-price{grid-area:price;border-top:1px solid var(--bg);padding-top:10px;text-align:right;}
+  .col-fornecedor{grid-area:fornecedor;align-self:center;}
+  .col-actions{grid-area:actions;display:flex;justify-content:flex-end;gap:6px;}
+  .col-cond,.col-date{display:none;}
+
   @media(min-width:901px){
+    .table-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+    .group{margin-bottom:0;}
+    .group-head{background:var(--surface-tint);padding:9px 22px;border-bottom:1px solid var(--line);}
     .row-head{
       display:grid;
-      grid-template-columns:1.3fr 1fr .7fr .7fr .8fr auto;
+      grid-template-columns:2.1fr 1fr .9fr 1fr .9fr 1.1fr 1fr .8fr;
       gap:12px;
-      padding:0 14px 8px;
+      padding:13px 22px;
+      background:var(--surface-tint-2);
+      border-bottom:1px solid var(--line);
       font-size:10.5px;
       font-weight:700;
       text-transform:uppercase;
       letter-spacing:.05em;
       color:var(--ink-soft);
     }
-    .row-head span:last-child{min-width:76px;}
+    .row{
+      background:transparent;
+      border:none;
+      border-bottom:1px solid var(--line);
+      border-radius:0;
+      padding:16px 22px;
+      grid-template-columns:2.1fr 1fr .9fr 1fr .9fr 1.1fr 1fr .8fr;
+      grid-template-areas:none;
+      row-gap:0;
+      margin-bottom:0;
+    }
+    .row:last-child{border-bottom:none;}
+    .row.is-novo{border-width:0 0 1px;box-shadow:inset 3px 0 0 0 var(--amber);}
+    .row:last-child.is-novo{border-bottom:none;}
+    .col-brand,.col-size,.col-qty,.col-price,.col-fornecedor,.col-actions{grid-area:auto;}
+    .col-size{border-top:none;padding-top:0;}
+    .col-price{border-top:none;padding-top:0;text-align:left;}
+    .col-qty{justify-self:start;}
+    .col-cond,.col-date{display:block;}
+    .col-actions{justify-content:flex-end;}
   }
-  .row{
-    background:var(--surface);
-    border:1px solid var(--line);
-    border-radius:9px;
-    padding:12px 14px;
-    display:grid;
-    grid-template-columns:1.3fr 1fr .7fr .7fr .8fr auto;
-    gap:12px;
-    align-items:center;
-    margin-bottom:8px;
-    position:relative;
-  }
-  .row.is-novo{border-color:var(--amber);}
-  @media(max-width:900px){
-    .row{grid-template-columns:1fr 1fr;row-gap:6px;}
-    .row .col-actions{grid-column:1/-1;justify-content:flex-end;}
-  }
+
   .col-date{
     font-family:'IBM Plex Mono',monospace;
     font-size:13px;
     color:var(--ink-soft);
   }
-  .col label.mobile-label{
-    display:none;
-    font-size:10px;
-    font-weight:700;
-    text-transform:uppercase;
-    color:var(--ink-soft);
-    letter-spacing:.03em;
-  }
-  @media(max-width:900px){ .col label.mobile-label{display:block;} }
-  .col-brand{font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .col-fornecedor{font-size:12.5px;color:var(--ink-soft);}
   .tag-cond{
     display:inline-flex;
     align-items:center;
     gap:4px;
-    font-size:10px;
+    font-size:11px;
     font-weight:700;
     letter-spacing:.03em;
-    padding:2px 8px;
+    padding:3px 10px;
     border-radius:20px;
     text-transform:uppercase;
   }
@@ -848,16 +887,17 @@
   .col-price{font-family:'IBM Plex Mono',monospace;font-size:13.5px;color:var(--ink-soft);}
   .col-actions{display:flex;justify-content:flex-end;gap:8px;}
   .icon-btn{
-    width:32px;height:32px;
+    width:30px;height:30px;
     border-radius:7px;
     border:1.5px solid var(--line);
     background:#fff;
     cursor:pointer;
     display:flex;align-items:center;justify-content:center;
-    font-size:14px;
     color:var(--ink-soft);
     transition:all .12s ease;
+    flex-shrink:0;
   }
+  .icon-btn .icon{width:14px;height:14px;}
   .icon-btn:hover{border-color:var(--rust);color:var(--rust);background:var(--rust-bg);}
   .icon-btn.check-btn:hover{border-color:var(--green);color:var(--green);background:var(--green-bg);}
   .icon-btn.confirm{
@@ -912,21 +952,6 @@
     font-weight:700;
     font-size:12px;
     cursor:pointer;
-  }
-
-  /* FORNECEDOR TAG */
-  .tag-fornecedor{
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-    background:#EFE8DA;
-    color:#7A6A3F;
-    font-size:10px;
-    font-weight:700;
-    letter-spacing:.03em;
-    padding:2px 7px;
-    border-radius:20px;
-    text-transform:none;
   }
 
   /* DASHBOARD */

@@ -157,6 +157,7 @@
 
   <div class="toolbar">
     <div class="search">
+      <svg class="icon search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="searchInput" placeholder="Buscar por marca ou medida...">
     </div>
     <div class="chip-group" id="condFilterGroup">
@@ -424,17 +425,21 @@
    </div>
   </div>
 
-  <div class="row-head">
-    <span>Marca / modelo</span>
-    <span>Medida</span>
-    <span>Qtd.</span>
-    <span>Preço</span>
-    <span>Adicionado em</span>
-    <span></span>
-  </div>
+  <div class="table-card">
+    <div class="row-head">
+      <span>Marca / modelo</span>
+      <span>Medida</span>
+      <span>Qtd.</span>
+      <span>Preço</span>
+      <span>Condição</span>
+      <span>Fornecedor</span>
+      <span>Adicionado em</span>
+      <span></span>
+    </div>
 
-  <div id="content">
-    <div class="loading">Carregando estoque...</div>
+    <div id="content">
+      <div class="loading">Carregando estoque...</div>
+    </div>
   </div>
 
   <div class="toolbar" id="paginationBar" style="display:none;justify-content:center;">
