@@ -71,44 +71,78 @@
 
 <!-- APLICATIVO -->
 <div id="appScreen" style="display:none;">
-<div class="wrap">
+<div class="app-shell">
 
-  <div class="header">
-    <div class="brand">
-      <div class="brand-mark"></div>
-      <div>
-        <h1>Estoque de Pneus</h1>
-        <span>Controle por medida e quantidade</span>
+  <nav class="app-sidebar">
+    <div class="header">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <h1>Estoque de Pneus</h1>
+          <span>Controle por medida e quantidade</span>
+        </div>
+      </div>
+      <div class="user-bar">
+        <span>Logado como <b id="userEmail"></b></span>
+        <button class="btn btn-ghost" id="logoutBtn">Sair</button>
       </div>
     </div>
-    <div class="user-bar">
-      <span>Logado como <b id="userEmail"></b></span>
-      <button class="btn btn-ghost" id="logoutBtn">Sair</button>
+
+    <!-- NAVEGAÇÃO POR ABAS -->
+    <div class="tabbar" role="tablist" aria-label="Seções do estoque">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="tabEstoque" data-tab="estoque">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        Estoque
+      </button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="tabHistorico" data-tab="historico">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+        Histórico
+      </button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="tabDashboard" data-tab="dashboard">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Dashboard
+      </button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="tabExportar" data-tab="exportar">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar
+      </button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="tabConferencia" data-tab="conferencia">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><polyline points="9 14 11 16 15 12"/></svg>
+        Conferência
+      </button>
     </div>
-  </div>
+  </nav>
+
+  <div class="wrap app-main">
 
   <div class="header-actions">
     <div class="action-group">
       <span class="action-group-label">Entrada de estoque</span>
       <div class="action-group-btns">
-        <button class="btn btn-secondary" id="xmlBtn">📄 XML (NF-e)</button>
-        <button class="btn btn-secondary" id="importBtn">📊 Planilha/PDF</button>
-        <button class="btn btn-secondary" id="syncBtn">🔄 Sincronizar empresa</button>
+        <button class="btn btn-secondary" id="xmlBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          XML (NF-e)
+        </button>
+        <button class="btn btn-secondary" id="importBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Planilha/PDF
+        </button>
+        <button class="btn btn-secondary" id="syncBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Sincronizar empresa
+        </button>
       </div>
     </div>
     <div class="action-group-btns">
-      <button class="btn btn-secondary" id="conferBtn">📷 Verificar pneu</button>
-      <button class="btn btn-primary" id="toggleFormBtn">+ Novo pneu</button>
+      <button class="btn btn-secondary" id="conferBtn">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Verificar pneu
+      </button>
+      <button class="btn btn-primary" id="toggleFormBtn">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo pneu
+      </button>
     </div>
-  </div>
-
-  <!-- NAVEGAÇÃO POR ABAS -->
-  <div class="tabbar" role="tablist" aria-label="Seções do estoque">
-    <button class="tab active" role="tab" aria-selected="true" aria-controls="tabEstoque" data-tab="estoque">📦 Estoque</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="tabHistorico" data-tab="historico">📜 Histórico</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="tabDashboard" data-tab="dashboard">📈 Dashboard</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="tabExportar" data-tab="exportar">📤 Exportar</button>
-    <button class="tab" role="tab" aria-selected="false" aria-controls="tabConferencia" data-tab="conferencia">📋 Conferência</button>
   </div>
 
   <!-- ================= ABA: ESTOQUE ================= -->
@@ -122,10 +156,13 @@
     </div>
     <div class="chip-group" id="condFilterGroup">
       <button class="chip active" data-cond="todos">Todos</button>
-      <button class="chip" data-cond="novo">🟢 Novo</button>
-      <button class="chip" data-cond="usado">⚙ Usado</button>
+      <button class="chip" data-cond="novo"><span class="dot-green"></span> Novo</button>
+      <button class="chip" data-cond="usado">Usado</button>
     </div>
-    <button class="chip" id="novoChip">🏷 Recentes <span class="badge-count" id="novoCount">0</span></button>
+    <button class="chip" id="novoChip">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.58 3.24L3 3v6.58a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.82 0l4.6-4.6a2 2 0 0 0 0-2.83z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+      Recentes <span class="badge-count" id="novoCount">0</span>
+    </button>
     <select id="sortModeSelect" class="sort-select">
       <option value="aro">Ordenar por aro</option>
       <option value="qtd_asc">Menor quantidade primeiro</option>
@@ -174,9 +211,11 @@
         <label for="fCodigoBarras">Código de barras (etiqueta física)</label>
         <div class="field-with-btn">
           <input type="text" id="fCodigoBarras" placeholder="Opcional">
-          <button type="button" class="btn btn-ghost scan-inline-btn" id="scanCodigoBtn" title="Ler com a câmera">📷</button>
+          <button type="button" class="btn btn-ghost scan-inline-btn" id="scanCodigoBtn" title="Ler com a câmera">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
         </div>
-        <small>Digite ou use a câmera 📷 — usado na conferência de estoque físico x digital</small>
+        <small>Digite ou use a câmera — usado na conferência de estoque físico x digital</small>
       </div>
     </div>
     <div class="err" id="formErr"></div>
@@ -197,7 +236,10 @@
     </p>
 
     <div class="import-upload">
-      <label for="xmlFileInput" class="btn btn-primary">📁 Escolher arquivo XML</label>
+      <label for="xmlFileInput" class="btn btn-primary">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Escolher arquivo XML
+      </label>
       <input type="file" id="xmlFileInput" accept=".xml,text/xml" style="display:none;">
     </div>
 
@@ -235,7 +277,10 @@
     </p>
 
     <div class="import-upload">
-      <label for="importFileInput" class="btn btn-primary">📁 Escolher arquivo</label>
+      <label for="importFileInput" class="btn btn-primary">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Escolher arquivo
+      </label>
       <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
       <button class="btn btn-ghost" id="downloadTemplateBtn">Baixar planilha modelo</button>
     </div>
@@ -261,14 +306,17 @@
     <h2>Sincronizar com o estoque da empresa</h2>
     <p class="sub">
       Envie o relatório de estoque mais recente da empresa (PDF ou planilha). Os itens marcados como
-      <b>🏢 empresa</b> têm a quantidade <b>substituída</b> pelo valor do relatório (não somada), e itens
+      <b>empresa</b> têm a quantidade <b>substituída</b> pelo valor do relatório (não somada), e itens
       da empresa que sumirem do relatório novo são zerados automaticamente — como se tivessem saído de lá.
       Os pneus que você cadastra por conta própria (fora dessa sincronização) nunca são afetados por essa
       tela, e continuam somando ao total do seu estoque normalmente.
     </p>
 
     <div class="import-upload">
-      <label for="syncFileInput" class="btn btn-primary">📁 Escolher relatório da empresa</label>
+      <label for="syncFileInput" class="btn btn-primary">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Escolher relatório da empresa
+      </label>
       <input type="file" id="syncFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
     </div>
 
@@ -287,7 +335,7 @@
    </div>
   </div>
 
-  <!-- LEITURA RÁPIDA DE UM CÓDIGO (usado pelo botão 📷 dentro de qualquer pop-out, ex: Editar) -->
+  <!-- LEITURA RÁPIDA DE UM CÓDIGO (usado pelo botão de câmera dentro de qualquer pop-out, ex: Editar) -->
   <div class="panel" id="scanOnceModal">
    <div class="modal-card">
     <h2>Ler código de barras</h2>
@@ -324,14 +372,20 @@
   <div class="panel" id="stickerModal">
    <div class="modal-card sticker-card">
     <div id="stickerFound">
-      <div class="sticker-badge">🛞</div>
+      <div class="sticker-badge brand-mark" style="width:56px;height:56px;margin:0 auto 8px;"></div>
       <div class="sticker-field"><span>Marca / modelo</span><b id="stickerMarca">—</b></div>
       <div class="sticker-field"><span>Medida</span><b id="stickerMedida">—</b></div>
       <div class="sticker-field"><span>Quantidade em estoque</span><b class="sticker-qty" id="stickerQtd">0</b></div>
 
       <div class="sticker-actions" id="stickerMainActions">
-        <button class="btn btn-secondary" id="stickerAddBtn">➕ Adicionar mais pneus</button>
-        <button class="btn btn-secondary" id="stickerRemoveBtn">➖ Remover pneu</button>
+        <button class="btn btn-secondary" id="stickerAddBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Adicionar mais pneus
+        </button>
+        <button class="btn btn-secondary" id="stickerRemoveBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Remover pneu
+        </button>
       </div>
 
       <div class="sticker-adjust" id="stickerAdjust">
@@ -346,7 +400,9 @@
     </div>
 
     <div id="stickerNotFound" style="display:none;">
-      <div class="sticker-badge">❓</div>
+      <div class="sticker-badge" style="display:flex;align-items:center;justify-content:center;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft);"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
       <p class="sub" style="text-align:center;">Nenhum pneu cadastrado com este código de barras.</p>
       <div class="form-actions" style="justify-content:center;">
         <button class="btn btn-primary" id="stickerCadastrarBtn">Cadastrar este código</button>
@@ -354,7 +410,10 @@
     </div>
 
     <div class="form-actions" style="margin-top:14px;">
-      <button class="btn btn-ghost" id="stickerRescanBtn">📷 Ler outro código</button>
+      <button class="btn btn-ghost" id="stickerRescanBtn">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Ler outro código
+      </button>
       <button class="btn btn-primary" id="closeStickerBtn">Fechar</button>
     </div>
    </div>
@@ -431,7 +490,10 @@
           <option value="xlsx">Planilha (.xlsx)</option>
           <option value="pdf">PDF</option>
         </select>
-        <button class="btn btn-primary" id="exportBtn">📤 Exportar</button>
+        <button class="btn btn-primary" id="exportBtn">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar
+        </button>
       </div>
     </div>
     <div class="export-preview-wrap">
@@ -453,13 +515,17 @@
       <div class="search">
         <input type="text" id="conferSearchInput" placeholder="Buscar por marca ou medida...">
       </div>
-      <button class="btn btn-primary" id="conferScanBtn">📷 Escanear</button>
+      <button class="btn btn-primary" id="conferScanBtn">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Escanear
+      </button>
     </div>
 
     <div id="conferList"></div>
   </div>
 
-</div>
+  </div><!-- /app-main -->
+</div><!-- /app-shell -->
 
 <div class="toast" id="toast"></div>
 
