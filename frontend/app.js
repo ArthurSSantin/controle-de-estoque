@@ -604,6 +604,8 @@
       </div>
     `;
     novoCount.textContent = tires.filter((t) => t.novo).length;
+    const summaryEl = document.getElementById('estoqueSummary');
+    if (summaryEl) summaryEl.textContent = `${totalItens} ${totalItens === 1 ? 'item cadastrado' : 'itens cadastrados'} · ${totalUnidades} unidades em estoque`;
   }
 
   function applyFilters(list) {
@@ -1528,6 +1530,18 @@
      10c. HISTÓRICO DE MOVIMENTAÇÕES
   ========================================================================= */
 
+  const ICON_BOX = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+  const ICON_ARROW_UP_RIGHT = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>';
+  const ICON_ARROW_DOWN_RIGHT = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="7" x2="17" y2="17"/><polyline points="17 7 17 17 7 17"/></svg>';
+
+  const HISTORY_ACAO_ICON = {
+    criado: { icon: ICON_BOX, cls: 'neutro' },
+    editado: { icon: ICON_EDIT, cls: 'amber' },
+    excluido: { icon: ICON_TRASH, cls: 'rust' },
+    entrada: { icon: ICON_ARROW_UP_RIGHT, cls: 'green' },
+    saida: { icon: ICON_ARROW_DOWN_RIGHT, cls: 'rust' },
+  };
+
   const HISTORY_ACAO_LABEL = {
     criado: 'Criado',
     editado: 'Editado',
@@ -1599,13 +1613,18 @@
         return;
       }
 
-      listEl.innerHTML = entries.map((h) => `
+      listEl.innerHTML = entries.map((h) => {
+        const { icon, cls } = HISTORY_ACAO_ICON[h.acao] || { icon: ICON_BOX, cls: 'neutro' };
+        return `
         <div class="history-row">
-          <span class="history-acao">${HISTORY_ACAO_LABEL[h.acao] || h.acao}</span>
-          <span class="history-text">${escapeHtml(historyEntryText(h))}</span>
+          <div class="history-icon ${cls}">${icon}</div>
+          <div class="history-body">
+            <span class="history-acao ${cls}">${HISTORY_ACAO_LABEL[h.acao] || h.acao}</span>
+            <div class="history-text">${escapeHtml(historyEntryText(h))}</div>
+          </div>
           <span class="history-date">${formatDateTime(h.createdAt)}</span>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     } catch (e) {
       statusEl.textContent = 'Não foi possível carregar o histórico. Verifique sua conexão com a API.';
     }
@@ -1655,6 +1674,24 @@
 
       const days = Object.keys(byDay).sort();
       const maxVal = Math.max(1, ...days.map((k) => Math.max(byDay[k].entrada, byDay[k].saida)));
+
+      const totalEntradas = days.reduce((s, k) => s + byDay[k].entrada, 0);
+      const totalSaidas = days.reduce((s, k) => s + byDay[k].saida, 0);
+      const saldo = totalEntradas - totalSaidas;
+      document.getElementById('dashboardKpis').innerHTML = `
+        <div class="stat">
+          <div class="stat-icon" style="background:var(--green-bg);color:var(--green);"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg></div>
+          <div><b style="color:var(--green);">+${totalEntradas}</b><span>Entradas no período</span></div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon" style="background:var(--rust-bg);color:var(--rust);"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="7" x2="17" y2="17"/><polyline points="17 7 17 17 7 17"/></svg></div>
+          <div><b style="color:var(--rust);">−${totalSaidas}</b><span>Saídas no período</span></div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div><b>${saldo >= 0 ? '+' : ''}${saldo}</b><span>Saldo do período</span></div>
+        </div>
+      `;
 
       chartEl.innerHTML = days.map((k) => {
         const { entrada, saida } = byDay[k];
