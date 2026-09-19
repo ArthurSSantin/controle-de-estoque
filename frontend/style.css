@@ -85,6 +85,7 @@
     padding-bottom:18px;
     border-bottom:1px solid var(--line);
   }
+  .header-actions[hidden]{display:none;}
   .action-group{display:flex;flex-direction:column;gap:6px;}
   .action-group-label{
     font-size:10.5px;
@@ -176,7 +177,36 @@
       cursor:pointer;
       z-index:55;
     }
+    .mobile-fab[hidden]{display:none;}
     .mobile-fab .icon{width:24px;height:24px;}
+
+    /* cabeçalho compacto — email sem o prefixo "Logado como" */
+    .user-bar-prefix{display:none;}
+
+    /* ações de entrada de estoque viram um grid compacto de ícones,
+       igual ao mockup mobile — mesmos botões/IDs, só reestilizados */
+    .header-actions{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+    }
+    .action-group,.action-group-btns{display:contents;}
+    .action-group-label{display:none;}
+    .header-actions .btn{
+      flex-direction:column;
+      gap:6px;
+      padding:10px 4px;
+      font-size:10.5px;
+      text-align:center;
+      border-radius:12px;
+      background:var(--surface);
+      color:var(--ink);
+      border:1.5px solid var(--line);
+      box-shadow:none;
+      white-space:normal;
+    }
+    .header-actions .btn .icon{width:18px;height:18px;}
+    .header-actions .btn-detail{display:none;}
   }
 
   /* sidebar fixa no desktop — mesma .tabbar/.tab, só reestilizada aqui */
@@ -245,18 +275,14 @@
     padding:20px;
     margin-bottom:22px;
   }
+  @media(min-width:901px){
+    .tab-panel-card{padding:28px 32px;}
+  }
   .chart-card-title{
     font-size:13px;
     font-weight:700;
     color:var(--ink);
     margin-bottom:18px;
-  }
-  .tab-panel-title{
-    font-family:'Oswald',sans-serif;
-    font-size:18px;
-    text-transform:uppercase;
-    letter-spacing:.02em;
-    margin:0 0 4px;
   }
   .page-title{
     font-family:'Oswald',sans-serif;
@@ -296,11 +322,11 @@
     text-transform:uppercase;
     letter-spacing:.04em;
     color:var(--ink-soft);
-    padding:8px 14px;
-    border-bottom:1.5px solid var(--line);
+    padding:10px 16px;
+    border-bottom:1px solid var(--line);
     position:sticky;
     top:0;
-    background:var(--surface);
+    background:var(--surface-tint-2);
   }
   .export-preview th label{
     display:flex;
@@ -315,7 +341,7 @@
     flex-shrink:0;
   }
   .export-preview td{
-    padding:9px 14px;
+    padding:12px 16px;
     border-bottom:1px solid var(--line);
     color:var(--ink);
   }
@@ -344,10 +370,12 @@
   }
   .btn-primary:hover{background:#EAB43E;}
   .btn-secondary{
-    background:var(--rubber);
-    color:#F2EEE4;
+    background:var(--surface);
+    color:var(--ink);
+    border:1.5px solid var(--line);
   }
-  .btn-secondary:hover{background:#33302A;}
+  .btn-secondary:hover{border-color:var(--ink-soft);}
+  .btn-detail{display:inline;}
   .btn-ghost{
     background:transparent;
     color:var(--ink-soft);
@@ -529,6 +557,32 @@
     color:var(--ink);
   }
   .panel .sub{font-size:12.5px;color:var(--ink-soft);margin:0 0 16px;}
+  .form-modal-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+  }
+  #formTitle{
+    font-size:19px;
+    text-transform:none;
+    letter-spacing:0;
+    margin:0;
+  }
+  .modal-close-btn{
+    width:30px;
+    height:30px;
+    flex-shrink:0;
+    border:none;
+    background:none;
+    border-radius:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .modal-close-btn:hover{background:var(--bg);}
   .form-grid{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -1005,12 +1059,15 @@
   #dashboardChart{
     display:flex;
     align-items:flex-end;
-    gap:6px;
+    gap:10px;
     height:220px;
     padding:10px 0 0;
     border-bottom:1.5px solid var(--line);
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
+  }
+  @media(min-width:901px){
+    #dashboardChart{height:280px;}
   }
   .dash-bar-wrap{
     flex:1;
@@ -1019,16 +1076,16 @@
     align-items:center;
     justify-content:flex-end;
     height:100%;
-    gap:4px;
+    gap:8px;
   }
   .dash-bars{
     display:flex;
     align-items:flex-end;
-    gap:2px;
+    gap:3px;
     height:100%;
   }
   .dash-bar{
-    width:10px;
+    width:12px;
     border-radius:3px 3px 0 0;
   }
   .dash-bar.entrada{background:var(--green);}

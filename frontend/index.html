@@ -117,7 +117,7 @@
         </div>
       </div>
       <div class="user-bar">
-        <span>Logado como <b id="userEmail"></b></span>
+        <span><span class="user-bar-prefix">Logado como </span><b id="userEmail"></b></span>
         <button class="btn btn-ghost" id="logoutBtn">Sair</button>
       </div>
     </div>
@@ -155,26 +155,26 @@
       <div class="action-group-btns">
         <button class="btn btn-secondary" id="xmlBtn">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          XML (NF-e)
+          XML<span class="btn-detail"> (NF-e)</span>
         </button>
         <button class="btn btn-secondary" id="importBtn">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Planilha/PDF
+          Planilha<span class="btn-detail">/PDF</span>
         </button>
         <button class="btn btn-secondary" id="syncBtn">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          Sincronizar empresa
+          Sincronizar<span class="btn-detail"> empresa</span>
         </button>
       </div>
     </div>
     <div class="action-group-btns">
       <button class="btn btn-secondary" id="conferBtn">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        Verificar pneu
+        Verificar<span class="btn-detail"> pneu</span>
       </button>
       <button class="btn btn-primary" id="toggleFormBtn">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Novo pneu
+        Novo<span class="btn-detail"> pneu</span>
       </button>
     </div>
   </div>
@@ -219,7 +219,12 @@
   <!-- FORMULÁRIO MANUAL (pop-out) -->
   <div class="panel" id="formPanel">
    <div class="modal-card">
-    <h2 id="formTitle">Adicionar pneu</h2>
+    <div class="form-modal-head">
+      <h2 id="formTitle">Adicionar pneu</h2>
+      <button type="button" class="modal-close-btn" id="closeFormBtn" aria-label="Fechar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
     <p class="sub">Preencha os dados do item</p>
     <div class="form-grid">
       <div class="field">
@@ -539,9 +544,9 @@
   </div>
 
   <!-- ================= ABA: EXPORTAR ================= -->
-  <div class="tab-panel tab-panel-card" id="tabExportar" role="tabpanel" hidden>
-    <h2 class="tab-panel-title">Exportar estoque</h2>
-    <p class="sub">Pré-visualização do que será exportado para planilha — marque abaixo as colunas que quer incluir.</p>
+  <div class="tab-panel" id="tabExportar" role="tabpanel" hidden>
+    <h2 class="page-title">Exportar</h2>
+    <p class="page-sub">Pré-visualização do que será exportado — marque abaixo as colunas que quer incluir. Ordenado por medida.</p>
     <div class="toolbar" style="justify-content:space-between;">
       <span class="sub" id="exportSummary">0 itens</span>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -561,9 +566,9 @@
   </div>
 
   <!-- ================= ABA: CONFERÊNCIA DE ESTOQUE ================= -->
-  <div class="tab-panel tab-panel-card" id="tabConferencia" role="tabpanel" hidden>
-    <h2 class="tab-panel-title">Conferência de estoque</h2>
-    <p class="sub">
+  <div class="tab-panel" id="tabConferencia" role="tabpanel" hidden>
+    <h2 class="page-title">Conferência de estoque</h2>
+    <p class="page-sub">
       Confira o estoque físico contra o digital: escaneie o código de barras de cada pneu ou confirme
       manualmente. Itens não encontrados ficam marcados com uma tag que você pode buscar depois.
     </p>
@@ -572,6 +577,7 @@
 
     <div class="toolbar">
       <div class="search">
+        <svg class="icon search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="conferSearchInput" placeholder="Buscar por marca ou medida...">
       </div>
       <button class="btn btn-primary" id="conferScanBtn">

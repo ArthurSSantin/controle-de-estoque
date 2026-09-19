@@ -159,6 +159,14 @@
       btn.setAttribute('aria-selected', String(isActive));
     });
 
+    // "Entrada de estoque" (XML/Planilha/Sincronizar/Verificar/Novo pneu) e o FAB
+    // só fazem sentido na aba Estoque — nas outras abas o conteúdo começa direto
+    // no título, como nos mockups de Histórico/Dashboard/Exportar/Conferência.
+    const headerActionsEl = document.querySelector('.header-actions');
+    if (headerActionsEl) headerActionsEl.hidden = name !== 'estoque';
+    const fabEl = document.getElementById('mobileFabBtn');
+    if (fabEl) fabEl.hidden = name !== 'estoque';
+
     if (name === 'historico') {
       populateHistoryTireFilter();
       loadAndRenderHistory();
@@ -235,6 +243,13 @@
   function formatDateTime(ts) {
     if (!ts) return '';
     return new Date(ts).toLocaleString('pt-BR');
+  }
+
+  function formatDateTimeShort(ts) {
+    if (!ts) return '';
+    return new Date(ts).toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
   }
 
   function escapeHtml(s) {
@@ -1622,7 +1637,7 @@
             <span class="history-acao ${cls}">${HISTORY_ACAO_LABEL[h.acao] || h.acao}</span>
             <div class="history-text">${escapeHtml(historyEntryText(h))}</div>
           </div>
-          <span class="history-date">${formatDateTime(h.createdAt)}</span>
+          <span class="history-date">${formatDateTimeShort(h.createdAt)}</span>
         </div>`;
       }).join('');
     } catch (e) {
@@ -1932,15 +1947,15 @@
   ========================================================================= */
 
   const EXPORT_COLUMNS = [
-    { key: 'marca', label: 'Marca / modelo', value: (t) => t.marca },
+    { key: 'marca', label: 'Marca / modelo', shortLabel: 'Marca/modelo', value: (t) => t.marca },
     { key: 'medida', label: 'Medida', value: (t) => t.medida },
-    { key: 'quantidade', label: 'Quantidade', value: (t) => t.quantidade },
+    { key: 'quantidade', label: 'Quantidade', shortLabel: 'Qtd.', value: (t) => t.quantidade },
     { key: 'preco', label: 'Preço', value: (t) => t.preco || '' },
     { key: 'condicao', label: 'Condição', value: (t) => (t.condicao === 'usado' ? 'Usado' : 'Novo') },
     { key: 'fornecedor', label: 'Fornecedor', value: (t) => t.fornecedor || '' },
-    { key: 'codigoBarras', label: 'Código de barras', value: (t) => t.codigoBarras || '' },
+    { key: 'codigoBarras', label: 'Código de barras', shortLabel: 'Cód. barras', value: (t) => t.codigoBarras || '' },
     { key: 'origem', label: 'Origem', value: (t) => (t.origem === 'empresa' ? 'Empresa' : 'Local') },
-    { key: 'addedAt', label: 'Adicionado em', value: (t) => formatDate(t.addedAt) },
+    { key: 'addedAt', label: 'Adicionado em', shortLabel: 'Adicionado', value: (t) => formatDate(t.addedAt) },
   ];
   let exportSelectedColumns = new Set(EXPORT_COLUMNS.map((c) => c.key));
 
@@ -1993,7 +2008,7 @@
     const table = document.getElementById('exportPreviewTable');
     const headHtml = `<tr>${EXPORT_COLUMNS.map((c) => `
       <th class="${exportSelectedColumns.has(c.key) ? '' : 'col-excluded'}">
-        <label><input type="checkbox" data-col="${c.key}" ${exportSelectedColumns.has(c.key) ? 'checked' : ''}> ${escapeHtml(c.label)}</label>
+        <label><input type="checkbox" data-col="${c.key}" ${exportSelectedColumns.has(c.key) ? 'checked' : ''}> ${escapeHtml(c.shortLabel || c.label)}</label>
       </th>`).join('')}</tr>`;
 
     const bodyHtml = tires.length
@@ -2469,6 +2484,7 @@
     formPanel.classList.contains('open') ? closeForm() : openAddForm();
   };
   document.getElementById('cancelBtn').onclick = closeForm;
+  document.getElementById('closeFormBtn').onclick = closeForm;
   document.getElementById('saveBtn').onclick = () =>
     withButtonBusy(document.getElementById('saveBtn'), 'Salvando...', saveTire);
 
