@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  CSP: style-src precisa de 'unsafe-inline' porque a maior parte da UI usa
+  atributos style="" inline (ex: os pop-outs escondidos com style="display:none;")
+  — refatorar isso pra classes CSS é mudança maior, fora do escopo desta correção.
+  script-src NÃO tem 'unsafe-inline': o registro do Service Worker que ficava
+  inline foi movido pra sw-register.js justamente pra evitar essa permissão.
+  frame-ancestors fica de fora de propósito: navegadores ignoram essa diretiva
+  quando entregue via <meta> (só vale via header HTTP) — quem hospedar isso
+  precisa setar "Content-Security-Policy: frame-ancestors 'self'" (ou
+  X-Frame-Options) no servidor/CDN pra ter proteção contra clickjacking.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://oytoeuoehoqdkhnhuuyy.supabase.co https://cdnjs.cloudflare.com; base-uri 'self'; form-action 'self'; object-src 'none'">
 <title>Controle de Estoque de Pneus</title>
 
 <!-- PWA -->
@@ -320,7 +332,7 @@
    <div class="modal-card">
     <h2>Importar planilha ou relatório em PDF</h2>
     <p class="sub">
-      Envie um arquivo .xlsx, .xls, .csv (colunas Marca, Medida, Quantidade, Preço, Condição)
+      Envie um arquivo .csv (colunas Marca, Medida, Quantidade, Preço, Condição)
       ou um PDF de relatório de estoque — o app tenta ler Marca, Medida, Quantidade e Valor de venda automaticamente.
     </p>
 
@@ -329,7 +341,7 @@
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         Escolher arquivo
       </label>
-      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
+      <input type="file" id="importFileInput" accept=".csv,.pdf" style="display:none;">
       <button class="btn btn-ghost" id="downloadTemplateBtn">Baixar planilha modelo</button>
     </div>
 
@@ -365,7 +377,7 @@
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         Escolher relatório da empresa
       </label>
-      <input type="file" id="syncFileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
+      <input type="file" id="syncFileInput" accept=".csv,.pdf" style="display:none;">
     </div>
 
     <div id="syncStatus" class="scan-hint" style="display:none;"></div>
@@ -598,18 +610,12 @@
 
 <script src="config.js" defer></script>
 <script src="auth.js" defer></script>
+<script src="zip-writer.js" defer></script>
+<script src="xlsx-writer.js" defer></script>
+<script src="csv-parser.js" defer></script>
+<script src="pdf-writer.js" defer></script>
+<script src="pdf-table.js" defer></script>
 <script src="app.js" defer></script>
-<script>
-  // Registra o Service Worker do PWA (permite instalar o app e funcionar
-  // offline). Roda só em produção (https) ou localhost; navegadores exigem
-  // conexão segura pra Service Worker funcionar.
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch((err) => {
-        console.warn('Falha ao registrar o Service Worker:', err);
-      });
-    });
-  }
-</script>
+<script src="sw-register.js" defer></script>
 </body>
 </html>

@@ -1166,7 +1166,7 @@
 
   const SCRIPT_LOAD_TIMEOUT_MS = 12000;
   const scriptLoadCache = {};
-  function loadScriptOnce(src) {
+  function loadScriptOnce(src, integrity) {
     if (!scriptLoadCache[src]) {
       scriptLoadCache[src] = new Promise((resolve, reject) => {
         let settled = false;
@@ -1187,6 +1187,12 @@
 
         const tag = document.createElement('script');
         tag.src = src;
+        // SRI: só faz sentido (e só é aceito pelo navegador) pra script vindo
+        // de CDN externo — os arquivos vendorizados em vendor/ são same-origin.
+        if (integrity) {
+          tag.integrity = integrity;
+          tag.crossOrigin = 'anonymous';
+        }
         tag.onload = () => {
           if (settled) return;
           settled = true;
@@ -1203,28 +1209,47 @@
     return scriptLoadCache[src];
   }
 
-  // xlsx, jsPDF e o plugin de tabela ficam vendorizados em frontend/vendor/
-  // (em vez de vir de CDN) porque a exportação depende deles e um
-  // bloqueador de anúncio/DNS filtrando o CDN travava a exportação por
-  // completo, sem alternativa — servindo do próprio domínio isso não
-  // depende de nenhum host externo.
-  const XLSX_CDN = 'vendor/xlsx.full.min.js';
+  // pdf.js abaixo é só pra LEITURA de relatório em PDF (import/sincronização)
+  // — a GERAÇÃO de PDF (exportação de estoque) não depende de CDN nem de lib
+  // de terceiro nenhuma: é frontend/pdf-writer.js + pdf-table.js, do mesmo
+  // jeito que a exportação em .xlsx é xlsx-writer.js + zip-writer.js.
   const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-  const JSPDF_CDN = 'vendor/jspdf.umd.min.js';
-  const JSPDF_AUTOTABLE_CDN = 'vendor/jspdf.plugin.autotable.min.js';
+  // SHA-384 do arquivo exato dessa versão (cdnjs) — trava a versão contra
+  // adulteração do CDN. Se algum dia atualizar PDFJS_CDN/PDFJS_WORKER_CDN,
+  // recalcule com: openssl dgst -sha384 -binary arquivo.js | openssl base64 -A
+  const PDFJS_INTEGRITY = 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e';
+  const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const PDFJS_WORKER_INTEGRITY = 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2';
 
-  async function ensureXLSX() {
-    if (typeof XLSX === 'undefined') await loadScriptOnce(XLSX_CDN);
-  }
   async function ensurePdfJs() {
-    if (typeof pdfjsLib === 'undefined') await loadScriptOnce(PDFJS_CDN);
-  }
-  // Gera PDF (relatório de exportação) — diferente do pdf.js acima, que só lê PDF.
-  async function ensureJsPdfGenerator() {
-    if (typeof window.jspdf === 'undefined') await loadScriptOnce(JSPDF_CDN);
-    if (typeof window.jspdf.jsPDF.API.autoTable === 'undefined') await loadScriptOnce(JSPDF_AUTOTABLE_CDN);
+    if (typeof pdfjsLib === 'undefined') await loadScriptOnce(PDFJS_CDN, PDFJS_INTEGRITY);
   }
 
+  // O <script src> do pdf.min.js já é protegido por SRI nativo (acima), mas
+  // o worker é carregado pelo próprio pdf.js via `new Worker(workerSrc)` —
+  // a API Worker não tem suporte a `integrity`. Pra não servir esse segundo
+  // arquivo sem nenhuma verificação, baixamos e conferimos o hash na mão
+  // antes de rodá-lo, entregando o worker via blob: (mesma origem).
+  let pdfWorkerBlobUrlPromise = null;
+  async function ensurePdfWorkerBlobUrl() {
+    if (!pdfWorkerBlobUrlPromise) {
+      pdfWorkerBlobUrlPromise = (async () => {
+        const res = await fetch(PDFJS_WORKER_CDN);
+        if (!res.ok) throw new Error('Não foi possível baixar o worker do pdf.js.');
+        const buffer = await res.arrayBuffer();
+        const digest = await crypto.subtle.digest('SHA-384', buffer);
+        const hashB64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
+        if (`sha384-${hashB64}` !== PDFJS_WORKER_INTEGRITY) {
+          throw new Error('Falha na verificação de integridade do worker do pdf.js.');
+        }
+        return URL.createObjectURL(new Blob([buffer], { type: 'application/javascript' }));
+      })().catch((err) => {
+        pdfWorkerBlobUrlPromise = null; // permite tentar de novo
+        throw err;
+      });
+    }
+    return pdfWorkerBlobUrlPromise;
+  }
   function normalizeHeader(h) {
     return String(h || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   }
@@ -1237,21 +1262,63 @@
     condicao: 'condicao', estado: 'condicao',
   };
 
-  async function parseSpreadsheet(file) {
-    await ensureXLSX();
+  // Limite de tamanho pro upload de planilha: evita tentar ler um arquivo
+  // claramente fora do que uma planilha de estoque real teria.
+  const SPREADSHEET_MAX_BYTES = 15 * 1024 * 1024; // 15MB
+  const SPREADSHEET_PARSE_TIMEOUT_MS = 20000;
+
+  // Usa a 1ª linha como cabeçalho e monta um objeto por linha de dado — é o
+  // formato que mapSpreadsheetRow() já espera (mesmo formato que
+  // XLSX.utils.sheet_to_json produzia antes da troca pro parser de CSV).
+  function csvRowsToObjects(rows) {
+    if (rows.length === 0) return [];
+    const header = rows[0];
+    return rows.slice(1).map((row) => {
+      const obj = {};
+      header.forEach((h, i) => {
+        obj[h] = row[i] !== undefined ? row[i] : '';
+      });
+      return obj;
+    });
+  }
+
+  function parseSpreadsheet(file) {
+    if (file.size > SPREADSHEET_MAX_BYTES) {
+      return Promise.reject(new Error('Arquivo maior que 15MB — confira se é mesmo a planilha certa.'));
+    }
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, arg) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(arg);
+      };
+
+      // CSV é parseado de forma síncrona, em uma única passagem O(n) (ver
+      // csv-parser.js) — bem diferente da leitura de .xlsx antiga, que rodava
+      // um parser de terceiro sobre um formato binário/ZIP e por isso ficava
+      // isolada num Worker. Esse timeout cobre a fase de LEITURA do arquivo
+      // (FileReader, que é assíncrona e pode travar em disco/USB com
+      // problema) — ele não consegue interromper o parse em si no meio, já
+      // que roda na mesma thread de forma síncrona; isso é aceitável porque
+      // o parser é O(n) e não tem como "travar" num arquivo de até 15MB de
+      // texto puro.
+      const timer = setTimeout(() => {
+        finish(reject, new Error('A leitura do arquivo demorou demais. Confira se o arquivo não está corrompido.'));
+      }, SPREADSHEET_PARSE_TIMEOUT_MS);
+
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          resolve(XLSX.utils.sheet_to_json(sheet, { defval: '' }));
+          const rows = CsvParser.parse(e.target.result);
+          finish(resolve, csvRowsToObjects(rows));
         } catch (err) {
-          reject(err);
+          finish(reject, err instanceof Error ? err : new Error(String(err)));
         }
       };
-      reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
-      reader.readAsArrayBuffer(file);
+      reader.onerror = () => finish(reject, new Error('Não foi possível ler o arquivo.'));
+      reader.readAsText(file);
     });
   }
 
@@ -1272,8 +1339,7 @@
    */
   async function extractPdfLines(file) {
     await ensurePdfJs();
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = await ensurePdfWorkerBlobUrl();
 
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -1379,15 +1445,14 @@
   }
 
   async function downloadTemplate() {
-    await ensureXLSX();
-    const ws = XLSX.utils.aoa_to_sheet([
+    const ws = XlsxWriter.aoaToSheet([
       ['Marca', 'Medida', 'Quantidade', 'Preço', 'Condição'],
       ['Pirelli', '185/65 R14', 4, '350', 'Novo'],
       ['Michelin', '225/45 R18', 2, '', 'Usado'],
     ]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Pneus');
-    XLSX.writeFile(wb, 'modelo-importacao-pneus.xlsx');
+    const wb = XlsxWriter.bookNew();
+    XlsxWriter.bookAppendSheet(wb, ws, 'Pneus');
+    await XlsxWriter.writeFile(wb, 'modelo-importacao-pneus.xlsx');
   }
 
   async function handleImportUpload(file) {
@@ -2029,12 +2094,11 @@
       showToast('Nada para exportar — o estoque está vazio.');
       return;
     }
-    await ensureXLSX();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Estoque');
+    const ws = XlsxWriter.jsonToSheet(rows);
+    const wb = XlsxWriter.bookNew();
+    XlsxWriter.bookAppendSheet(wb, ws, 'Estoque');
     const dataStr = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `estoque-pneus-${dataStr}.xlsx`);
+    await XlsxWriter.writeFile(wb, `estoque-pneus-${dataStr}.xlsx`);
   }
 
   async function exportStockPdf() {
@@ -2043,28 +2107,20 @@
       showToast('Nada para exportar — o estoque está vazio.');
       return;
     }
-    await ensureJsPdfGenerator();
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape' });
     const columns = Object.keys(rows[0]);
     const body = rows.map((r) => columns.map((c) => String(r[c] ?? '')));
 
-    doc.setFontSize(14);
-    doc.text('Estoque de Pneus', 14, 16);
-    doc.setFontSize(10);
-    doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} — ${rows.length} item(ns)`, 14, 22);
-
-    doc.autoTable({
-      head: [columns],
-      body,
-      startY: 28,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [227, 167, 43] },
+    const doc = PdfWriter.createDocument({ orientation: 'landscape' });
+    PdfTable.renderReport(doc, {
+      title: 'Estoque de Pneus',
+      subtitle: `Gerado em ${new Date().toLocaleDateString('pt-BR')} — ${rows.length} item(ns)`,
+      columns,
+      rows: body,
     });
 
     const dataStr = new Date().toISOString().slice(0, 10);
-    doc.save(`estoque-pneus-${dataStr}.pdf`);
+    await doc.save(`estoque-pneus-${dataStr}.pdf`);
   }
 
   /* =========================================================================
@@ -2077,9 +2133,23 @@
      barras não funciona, só de QR.
   ========================================================================= */
 
-  const JSQR_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js';
+  // ATENÇÃO: jsQR não existe no cdnjs (a URL antiga aqui, cdnjs.cloudflare.com/
+  // ajax/libs/jsQR/..., dava 404 — o fallback de QR code nunca funcionou em
+  // navegador sem BarcodeDetector nativo, ex: Firefox/Safari). Serve pelo
+  // jsDelivr, que espelha o pacote npm oficial (`jsqr`) e já está liberado no
+  // script-src da CSP (usado pelo supabase-js). Usa o arquivo NÃO minificado
+  // (dist/jsQR.js) de propósito: o dist/jsQR.min.js do jsDelivr é gerado
+  // dinamicamente (minificação sob demanda) e o próprio jsDelivr avisa pra
+  // NUNCA usar SRI nesses arquivos, já que o binário pode mudar entre
+  // deploys deles sem mudar de versão — travaria o carregamento pra sempre.
+  // dist/jsQR.js é o artefato publicado de verdade no pacote npm da versão
+  // 1.4.0, imutável, seguro pra fixar hash.
+  const JSQR_CDN = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+  // SHA-384 do arquivo exato dessa versão — recalcule com:
+  // openssl dgst -sha384 -binary arquivo.js | openssl base64 -A
+  const JSQR_INTEGRITY = 'sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx';
   async function ensureJsQR() {
-    if (typeof jsQR === 'undefined') await loadScriptOnce(JSQR_CDN);
+    if (typeof jsQR === 'undefined') await loadScriptOnce(JSQR_CDN, JSQR_INTEGRITY);
   }
 
   const BARCODE_FORMATS = [

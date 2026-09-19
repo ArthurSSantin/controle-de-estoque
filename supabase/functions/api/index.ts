@@ -13,6 +13,10 @@ const ALLOWED_ORIGIN = (Deno.env.get('ALLOWED_ORIGIN') || '')
   .map((o) => o.trim())
   .filter(Boolean);
 
+if (ALLOWED_ORIGIN.length === 0) {
+  console.warn('ALLOWED_ORIGIN não configurado — CORS negado para todas as origens (fail-safe).');
+}
+
 const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function supabaseForUser(accessToken: string) {
@@ -28,7 +32,9 @@ const app = new Hono<{ Variables: Vars }>().basePath('/api');
 app.use(
   '*',
   cors({
-    origin: ALLOWED_ORIGIN.length === 0 ? '*' : ALLOWED_ORIGIN,
+    // Sem ALLOWED_ORIGIN configurado, nega CORS por padrão em vez de abrir
+    // geral — um secret esquecido em prod não deve virar CORS aberto.
+    origin: ALLOWED_ORIGIN.length === 0 ? () => null : ALLOWED_ORIGIN,
     allowHeaders: ['Content-Type', 'Authorization'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })

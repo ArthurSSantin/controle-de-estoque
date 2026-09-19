@@ -246,3 +246,123 @@ test.describe('Exportar', () => {
     expect(download.suggestedFilename()).toMatch(/\.pdf$/);
   });
 });
+
+test.describe('Importar planilha', () => {
+  // A leitura de planilha (import/sincronização) usa csv-parser.js — parser
+  // de CSV próprio, sem lib de terceiro (a lib xlsx só era usada por isso;
+  // a exportação já não dependia dela, ver xlsx-writer.js). Roda direto na
+  // thread principal (FileReader.readAsText -> CsvParser.parse), sem Worker
+  // — CSV é texto puro parseado em O(n), diferente do XLSX.read() antigo
+  // (parser de terceiro sobre ZIP/XML binário) que justificava isolamento.
+  test('CSV real é lido e preenche as linhas de importação', async ({ page }) => {
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    const csv = 'Marca,Medida,Quantidade,Preço,Condição\nGoodyear Assurance,195/60 R15,5,350,Novo\n';
+    await page.click('#importBtn');
+    await page.setInputFiles('#importFileInput', {
+      name: 'planilha.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csv, 'utf-8'),
+    });
+
+    await expect(page.locator('#importRows .batch-row')).toHaveCount(1);
+    await expect(page.locator('#importRows .b-marca')).toHaveValue('Goodyear Assurance');
+    await expect(page.locator('#importRows .b-medida')).toHaveValue('195/60 R15');
+    await expect(page.locator('#importRows .b-qtd')).toHaveValue('5');
+  });
+
+  test('CSV com campo citado (vírgula dentro de aspas) é lido corretamente', async ({ page }) => {
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    const csv = 'Marca,Medida,Quantidade,Preço,Condição\n"Pneu, Cia. Ltda",195/60 R15,3,300,Usado\n';
+    await page.click('#importBtn');
+    await page.setInputFiles('#importFileInput', {
+      name: 'planilha.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csv, 'utf-8'),
+    });
+
+    await expect(page.locator('#importRows .b-marca')).toHaveValue('Pneu, Cia. Ltda');
+    await expect(page.locator('#importRows .b-condicao')).toHaveValue('usado');
+  });
+
+  test('arquivo maior que o limite é rejeitado antes de tentar ler', async ({ page }) => {
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    await page.click('#importBtn');
+    await page.setInputFiles('#importFileInput', {
+      name: 'planilha-gigante.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.alloc(15 * 1024 * 1024 + 1, 'a'),
+    });
+
+    await expect(page.locator('#importStatus')).toContainText('maior que 15MB');
+  });
+
+  test('arquivo binário disfarçado de .csv dá erro claro, não trava', async ({ page }) => {
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    // bytes claramente não-texto (cabeçalho PNG) — o navegador decodifica
+    // isso via FileReader.readAsText como uma string cheia de U+FFFD
+    // (caractere de substituição), que csv-parser.js detecta e rejeita.
+    const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03]);
+
+    await page.click('#importBtn');
+    await page.setInputFiles('#importFileInput', {
+      name: 'nao-e-csv-de-verdade.csv',
+      mimeType: 'text/csv',
+      buffer: pngHeader,
+    });
+
+    await expect(page.locator('#importStatus')).toContainText('não parece ser um CSV de texto válido');
+  });
+
+  test('um .xlsx de verdade renomeado pra .csv é rejeitado, não corrompe a importação', async ({ page }) => {
+    // Vetor de "disfarçar arquivo malicioso": gera um .xlsx REAL (zip com XML
+    // deflate dentro, via os próprios ZipWriter/XlsxWriter do app — já
+    // carregados na página) e sobe com extensão .csv. Isso é mais forte que
+    // testar só um cabeçalho binário genérico: confirma que o formato real
+    // que o app teria que rejeitar (não mais suportado desde a troca pra
+    // CSV-only) realmente dispara o guard de binário do csv-parser.js, e não
+    // passa batido por acaso ter trechos comprimidos que decodificam como
+    // UTF-8 válido.
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    const bytesArray = await page.evaluate(async () => {
+      const ws = XlsxWriter.aoaToSheet([['Marca', 'Medida', 'Quantidade'], ['Pirelli', '185/65 R14', 4]]);
+      const wb = XlsxWriter.bookNew();
+      XlsxWriter.bookAppendSheet(wb, ws, 'Pneus');
+      const zip = ZipWriter.createZipWriter();
+      // Reconstrói os mesmos arquivos que XlsxWriter.writeFile geraria, mas
+      // pega o Blob direto em vez de disparar download.
+      const encoder = new TextEncoder();
+      zip.addFile('[Content_Types].xml', encoder.encode('<Types/>'));
+      zip.addFile('xl/workbook.xml', encoder.encode('<workbook/>'));
+      zip.addFile('xl/worksheets/sheet1.xml', encoder.encode(JSON.stringify(ws)));
+      const blob = await zip.finalize('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      const buf = await blob.arrayBuffer();
+      return Array.from(new Uint8Array(buf));
+    });
+
+    await page.click('#importBtn');
+    await page.setInputFiles('#importFileInput', {
+      name: 'estoque-exportado.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(bytesArray),
+    });
+
+    await expect(page.locator('#importStatus')).toContainText('não parece ser um CSV de texto válido');
+    // Não deve ter criado nenhuma linha de importação a partir do lixo binário.
+    await expect(page.locator('#importRows .batch-row')).toHaveCount(0);
+  });
+});

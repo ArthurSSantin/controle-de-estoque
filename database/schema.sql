@@ -13,7 +13,7 @@ create table if not exists tires (
   owner_id     uuid not null references auth.users(id) default auth.uid(),
   marca        text not null,
   medida       text not null,            -- ex: "185/65 R14"
-  quantidade   integer not null default 0,
+  quantidade   integer not null default 0 check (quantidade >= 0),
   preco        text,                      -- opcional, guardado como texto (ex: "350,00")
   condicao     text not null default 'novo' check (condicao in ('novo', 'usado')),
   novo         boolean not null default true,   -- tag "recém-adicionado" (some ao marcar como visto)
@@ -38,8 +38,12 @@ alter table tires add column if not exists origem text not null default 'local';
 alter table tires drop constraint if exists tires_origem_check;
 alter table tires add constraint tires_origem_check check (origem in ('empresa', 'local'));
 
--- Se a tabela já existia sem a coluna owner_id, esta linha adiciona:
-alter table tires add column if not exists owner_id uuid references auth.users(id);
+-- Se a tabela já existia sem a coluna owner_id, esta linha adiciona.
+-- Se já houver linhas na tabela, faça o backfill de owner_id ANTES de
+-- rodar esta migração (não há como o script inferir o dono de linhas
+-- antigas sozinho) — caso contrário o "not null" abaixo vai falhar:
+--   update tires set owner_id = '<uuid-do-dono>' where owner_id is null;
+alter table tires add column if not exists owner_id uuid references auth.users(id) not null default auth.uid();
 
 create index if not exists idx_tires_medida on tires (medida);
 create index if not exists idx_tires_condicao on tires (condicao);

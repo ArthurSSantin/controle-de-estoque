@@ -8,8 +8,8 @@ Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas
 - Ordenação automática por aro (R13–R22) ou por quantidade em estoque; busca por marca/medida e filtro por condição (novo/usado).
 - Leitura de código de barras pela câmera do celular, tanto pra cadastrar quanto pra conferir um item já existente contra o estoque digital.
 - Entrada rápida via XML de nota fiscal (NF-e), com leitura automática de marca, medida, quantidade e valor.
-- Importação de planilhas (`.xlsx`/`.xls`/`.csv`) e relatórios em PDF, com tela de revisão antes de salvar.
-- Sincronização com relatórios de estoque de terceiros (PDF/Excel), reconciliando quantidades automaticamente.
+- Importação de planilhas (`.csv`) e relatórios em PDF, com tela de revisão antes de salvar.
+- Sincronização com relatórios de estoque de terceiros (PDF/CSV), reconciliando quantidades automaticamente.
 - Mesclagem automática de duplicados por marca, medida e condição.
 - Exportação do estoque para `.xlsx` ou PDF, com seleção de quais colunas incluir e ordenação automática por medida (largura → perfil → aro).
 - Histórico de movimentações (criação, edição, exclusão, entradas e saídas de quantidade) por item, com filtro por pneu e por período.
@@ -19,7 +19,7 @@ Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas
 
 ## Stack
 
-- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Bibliotecas de exportação (`xlsx`, `jsPDF`) vendorizadas em `frontend/vendor/` — a exportação não depende de nenhum CDN externo.
+- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Geração de `.xlsx` (`frontend/xlsx-writer.js` + `frontend/zip-writer.js`), de `.pdf` (`frontend/pdf-writer.js` + `frontend/pdf-table.js`) e leitura de `.csv` (`frontend/csv-parser.js`) implementadas do zero, sem dependência de terceiros. A leitura de relatórios em PDF (import/sincronização) usa `pdf.js` via CDN com Subresource Integrity — só extração de texto, não geração.
 - **Backend:** Supabase Edge Function (Deno + Hono).
 - **Banco de dados:** Supabase (PostgreSQL) com autenticação e RLS.
 - **Testes:** suíte end-to-end com Playwright (`frontend/tests/`), rodando automaticamente em todo push/PR via GitHub Actions.
@@ -38,7 +38,6 @@ controle-de-estoque/
 │   ├── manifest.json      # manifesto do PWA
 │   ├── sw.js              # Service Worker (cache da casca do app)
 │   ├── icons/             # ícones do PWA (inclusive o maskable)
-│   ├── vendor/            # xlsx e jsPDF vendorizados (exportação sem CDN)
 │   └── tests/             # suíte de testes end-to-end (Playwright) — ver frontend/tests/README.md
 │
 ├── supabase/

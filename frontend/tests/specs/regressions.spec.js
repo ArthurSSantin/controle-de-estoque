@@ -45,44 +45,67 @@ test.describe('Regressão — biblioteca externa que falha ao carregar', () => {
   // sessão, mesmo depois de resolver a rede real). Corrigido limpando o
   // cache em caso de falha.
   //
-  // Simulamos a falha na própria lib vendorizada (vendor/xlsx.full.min.js)
-  // em vez de um CDN externo de verdade: é o mesmo `loadScriptOnce()`, o
-  // mesmo bug, e um `page.route()` em arquivo local é 100% determinístico
-  // (sem depender de um domínio externo realmente estar fora do ar).
-  // Desligamos o Service Worker porque ele cacheia esse arquivo na casca do
-  // app (ver sw.js) e serviria do cache em vez de deixar a simulação atuar.
+  // Simulamos a falha bloqueando o CDN de verdade (cdnjs, pdf.js) via
+  // `page.route()` — determinístico, sem depender de um domínio externo
+  // realmente estar fora do ar. Desligamos o Service Worker porque ele
+  // cacheia a casca do app (ver sw.js) e poderia interferir na simulação.
+  //
+  // Alvo: LEITURA de PDF (import de relatório), via ensurePdfJs() ->
+  // loadScriptOnce(PDFJS_CDN). Não é mais a exportação em PDF — desde que
+  // ela passou a ser gerada por pdf-writer.js + pdf-table.js (sem terceiro,
+  // sem loadScriptOnce), a exportação não carrega mais nenhum script
+  // externo. A leitura de PDF (pdf.js, só usada no import/sincronização)
+  // continua vindo de CDN com SRI, então é ela que ainda exercita o bug
+  // original de loadScriptOnce().
   test('depois de uma falha ao carregar, uma nova tentativa tenta de novo (não fica presa em cache)', async ({ page }) => {
     await disableServiceWorker(page);
     await installCommonMocks(page, { tires: buildFakeTires(2) });
 
-    let blockXlsx = true;
+    let blockPdfJs = true;
     let hits = 0;
-    await page.route('**/vendor/xlsx.full.min.js', (route) => {
+    await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/**', (route) => {
       hits++;
-      if (blockXlsx) return route.abort('connectionrefused');
+      if (blockPdfJs) return route.abort('connectionrefused');
       return route.continue();
     });
 
     await bootIntoApp(page);
     await waitForContentReady(page);
-    await page.click('[data-tab="exportar"]');
 
-    // 1ª tentativa: lib "bloqueada" -> erro visível (não trava silencioso)
-    await page.click('#exportBtn');
-    await expect(page.locator('#toast')).toContainText('biblioteca externa', { timeout: 15000 });
-    expect(hits, 'deveria ter tentado buscar a lib pelo menos uma vez').toBeGreaterThan(0);
+    // PDF mínimo, mas válido de verdade (gerado pelo nosso próprio
+    // pdf-writer.js, já carregado na página) — pdf.js precisa conseguir
+    // abrir o arquivo pra provar que a 2ª tentativa funcionou; o conteúdo em
+    // si não precisa ter nenhuma linha de estoque reconhecível.
+    const pdfBytes = await page.evaluate(async () => {
+      const doc = PdfWriter.createDocument();
+      doc.text('relatório de teste', 14, 20);
+      const blob = await doc.output();
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    });
+
+    await page.click('#importBtn');
+
+    // 1ª tentativa: CDN "bloqueado" -> erro visível (não trava silencioso)
+    await page.setInputFiles('#importFileInput', {
+      name: 'relatorio.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(pdfBytes),
+    });
+    await expect(page.locator('#importStatus')).toContainText('biblioteca externa', { timeout: 15000 });
+    expect(hits, 'deveria ter tentado buscar o pdf.js pelo menos uma vez').toBeGreaterThan(0);
     const hitsAfterFirstTry = hits;
 
-    // "conserta a rede" e tenta exportar de novo — se o bug estivesse de
+    // "conserta a rede" e tenta importar de novo — se o bug estivesse de
     // volta, isso falharia na hora com o mesmo erro em cache, SEM gerar
     // uma requisição nova pro arquivo.
-    blockXlsx = false;
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 10000 }),
-      page.click('#exportBtn'),
-    ]);
-    expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
-    expect(hits, 'a 2ª tentativa deveria ter buscado a lib de novo, não reusado o erro em cache').toBeGreaterThan(hitsAfterFirstTry);
+    blockPdfJs = false;
+    await page.setInputFiles('#importFileInput', {
+      name: 'relatorio.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(pdfBytes),
+    });
+    await expect(page.locator('#importStatus')).not.toContainText('biblioteca externa', { timeout: 15000 });
+    expect(hits, 'a 2ª tentativa deveria ter buscado o pdf.js de novo, não reusado o erro em cache').toBeGreaterThan(hitsAfterFirstTry);
   });
 });
 
@@ -249,5 +272,41 @@ test.describe('Regressão — ícone maskable do PWA', () => {
 
     expect(metrics.cornerAlphas, 'os 4 cantos precisam ser 100% opacos (sem cantos arredondados transparentes)').toEqual([255, 255, 255, 255]);
     expect(metrics.contentRadiusRatio, 'a arte precisa caber na zona segura (~80% central) do ícone maskable').toBeLessThan(0.8);
+  });
+});
+
+test.describe('Regressão — fallback de leitura de código sem BarcodeDetector', () => {
+  // Bug: JSQR_CDN apontava pra cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js
+  // — jsQR NUNCA existiu no cdnjs (404), então em qualquer navegador sem a
+  // BarcodeDetector API nativa (Firefox, Safari mais antigos) o scanner de
+  // código de barras/QR simplesmente não funcionava, silenciosamente, sem
+  // ninguém perceber (os testes sempre mockavam BarcodeDetector, então nunca
+  // exercitavam esse caminho). Corrigido servindo jsQR pelo jsDelivr (espelho
+  // do pacote npm oficial `jsqr`, com SHA-384 fixado no <script>).
+  //
+  // Este teste força a ausência de BarcodeDetector e faz uma chamada de rede
+  // DE VERDADE pro jsDelivr (sem mockar essa URL) — é o único jeito de provar
+  // que o arquivo existe e carrega, não só que o código "tentou" carregar algo.
+  test('sem BarcodeDetector nativo, carrega o jsQR de verdade e a câmera inicia', async ({ page }) => {
+    await page.addInitScript(() => {
+      delete window.BarcodeDetector;
+      if (!navigator.mediaDevices) navigator.mediaDevices = {};
+      navigator.mediaDevices.getUserMedia = async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 240;
+        canvas.getContext('2d').fillRect(0, 0, 320, 240);
+        return canvas.captureStream(10);
+      };
+    });
+
+    await installCommonMocks(page, { tires: buildFakeTires(1) });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    await page.click('#conferBtn');
+    // Se o jsQR não carregasse, #scannerStatus ficaria visível com a mensagem
+    // de erro de biblioteca externa em vez de sumir (câmera "ligada").
+    await expect(page.locator('#scannerStatus')).toBeHidden({ timeout: 15000 });
   });
 });

@@ -6,7 +6,7 @@
 // IMPORTANTE: mude esse número toda vez que publicar uma nova versão do
 // frontend, senão os usuários que já instalaram o app podem continuar vendo
 // a versão antiga em cache por um tempo.
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v7';
 const CACHE_NAME = `estoque-pneus-${CACHE_VERSION}`;
 
 const APP_SHELL = [
@@ -17,10 +17,13 @@ const APP_SHELL = [
   './app.js',
   './auth.js',
   './config.js',
+  './sw-register.js',
+  './zip-writer.js',
+  './xlsx-writer.js',
+  './csv-parser.js',
+  './pdf-writer.js',
+  './pdf-table.js',
   './manifest.json',
-  './vendor/xlsx.full.min.js',
-  './vendor/jspdf.umd.min.js',
-  './vendor/jspdf.plugin.autotable.min.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
