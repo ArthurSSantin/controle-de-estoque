@@ -2,7 +2,7 @@
 // Supabase Auth (GoTrue) falso: login, cadastro, logout, refresh de token,
 // sessão herdada do supabase-js e sessão vinda do link de confirmação.
 const { test, expect } = require('@playwright/test');
-const { buildFakeTires, installCommonMocks, disableServiceWorker } = require('../helpers/mock-app');
+const { buildFakeTires, installCommonMocks, disableServiceWorker, waitForContentReady } = require('../helpers/mock-app');
 
 const STORAGE_KEY = 'sb-oytoeuoehoqdkhnhuuyy-auth-token';
 const USER = { id: 'user-1', email: 'loja@exemplo.com' };
@@ -115,6 +115,10 @@ test('sessão salva pelo supabase-js antigo continua valendo (ninguém é deslog
   await page.goto('/index.html');
   await expect(page.locator('#appScreen')).toBeVisible();
   await expect(page.locator('#userEmail')).toHaveText(USER.email);
+  // o estoque tem que carregar sozinho (bug: sessão resolvia antes do app.js
+  // existir e a tela ficava em "Carregando estoque..." pra sempre)
+  await waitForContentReady(page);
+  await expect(page.locator('#content')).toContainText('Marca Exclusiva 0');
   expect(calls, 'sessão válida não precisa de rede').toEqual([]);
 });
 
