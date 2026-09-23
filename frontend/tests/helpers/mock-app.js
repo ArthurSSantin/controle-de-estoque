@@ -3,22 +3,6 @@
 // testes não têm (e não devem precisar de) acesso ao Supabase/backend reais.
 // Gerar dados fictícios aqui, nunca aponte um teste pra API de produção.
 
-const SUPABASE_STUB = `
-window.supabase = {
-  createClient: function () {
-    return {
-      auth: {
-        getSession: async function () { return { data: { session: null } }; },
-        onAuthStateChange: function () { return { data: { subscription: { unsubscribe: function(){} } } }; },
-        signInWithPassword: async function () { return { error: null }; },
-        signUp: async function () { return { error: null }; },
-        signOut: async function () { return {}; },
-      },
-    };
-  },
-};
-`;
-
 let nextFakeId = 1000;
 
 /** Gera N pneus fictícios com marca/medida ÚNICAS por construção (sem
@@ -51,7 +35,7 @@ function buildFakeTires(n, { withDuplicates = 0, lowStockEvery = 0 } = {}) {
 
 /**
  * Instala os mocks de rede comuns a praticamente todo teste:
- *  - supabase-js (CDN) -> stub sem sessão
+ *  - Supabase Auth (/auth/v1) -> 401 (sem sessão)
  *  - Google Fonts -> aborta (sem custo, sem depender de rede externa)
  *  - GET/POST/PUT/DELETE /api/tires -> serve `state.tires` em memória
  *  - GET /api/history -> lista vazia por padrão
@@ -72,8 +56,10 @@ async function installCommonMocks(page, {
 } = {}) {
   const state = { tires, history: [] };
 
-  await page.route('**/supabase-js@2**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/javascript', body: SUPABASE_STUB })
+  // Auth (GoTrue): nenhum teste pode bater no Supabase de verdade. Sem sessão
+  // salva o auth-client nem chama a rede; specs de login sobrescrevem isso.
+  await page.route('**/auth/v1/**', (route) =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: '{"msg":"não mockado no teste"}' })
   );
   await page.route('https://fonts.googleapis.com/**', (route) => route.abort());
   await page.route('https://fonts.gstatic.com/**', (route) => route.abort());

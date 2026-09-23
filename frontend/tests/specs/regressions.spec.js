@@ -275,38 +275,55 @@ test.describe('Regressão — ícone maskable do PWA', () => {
   });
 });
 
-test.describe('Regressão — fallback de leitura de código sem BarcodeDetector', () => {
-  // Bug: JSQR_CDN apontava pra cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js
-  // — jsQR NUNCA existiu no cdnjs (404), então em qualquer navegador sem a
-  // BarcodeDetector API nativa (Firefox, Safari mais antigos) o scanner de
-  // código de barras/QR simplesmente não funcionava, silenciosamente, sem
-  // ninguém perceber (os testes sempre mockavam BarcodeDetector, então nunca
-  // exercitavam esse caminho). Corrigido servindo jsQR pelo jsDelivr (espelho
-  // do pacote npm oficial `jsqr`, com SHA-384 fixado no <script>).
+test.describe('Regressão — leitura de código sem BarcodeDetector', () => {
+  // Histórico: sem a BarcodeDetector nativa (iPhone/Safari, Firefox, Chrome
+  // no Windows) o app caía pro jsQR via CDN — primeiro por uma URL que dava
+  // 404 (scanner morto sem ninguém perceber), depois pelo jsDelivr, e mesmo
+  // assim só lia QR. Hoje o fallback é o leitor próprio (code-reader.js):
+  // não baixa nada de terceiros e lê QR e código de barras.
   //
-  // Este teste força a ausência de BarcodeDetector e faz uma chamada de rede
-  // DE VERDADE pro jsDelivr (sem mockar essa URL) — é o único jeito de provar
-  // que o arquivo existe e carrega, não só que o código "tentou" carregar algo.
-  test('sem BarcodeDetector nativo, carrega o jsQR de verdade e a câmera inicia', async ({ page }) => {
-    await page.addInitScript(() => {
-      delete window.BarcodeDetector;
-      if (!navigator.mediaDevices) navigator.mediaDevices = {};
-      navigator.mediaDevices.getUserMedia = async () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 320;
-        canvas.height = 240;
-        canvas.getContext('2d').fillRect(0, 0, 320, 240);
-        return canvas.captureStream(10);
-      };
+  // Aqui a câmera "filma" uma etiqueta de verdade (imagem de fixtures/codes)
+  // e o pneu cadastrado com aquele código tem que aparecer.
+  const cases = [
+    ['ean13.png', '7891234567895'],
+    // UPC-A: o leitor devolve 12 dígitos; cadastrado com 13 (0 na frente) é o mesmo código
+    ['upca.png', '0036000291452'],
+    ['qr.png', 'PNEU-00042'],
+  ];
+  for (const [file, stored] of cases) {
+    test(`sem BarcodeDetector, lê ${file} da câmera e acha o pneu`, async ({ page }) => {
+      await page.addInitScript((src) => {
+        delete window.BarcodeDetector;
+        if (!navigator.mediaDevices) navigator.mediaDevices = {};
+        navigator.mediaDevices.getUserMedia = async () => {
+          const img = new Image();
+          img.src = src;
+          await img.decode();
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          const draw = () => ctx.drawImage(img, 0, 0);
+          draw();
+          setInterval(draw, 100);
+          return canvas.captureStream(10);
+        };
+      }, '/tests/fixtures/codes/' + file);
+      const cdnRequests = [];
+      page.on('request', (r) => {
+        if (/jsdelivr|unpkg|cdnjs|jsqr/i.test(r.url())) cdnRequests.push(r.url());
+      });
+
+      const tires = buildFakeTires(3);
+      tires[1].codigoBarras = stored;
+      await installCommonMocks(page, { tires });
+      await bootIntoApp(page);
+      await waitForContentReady(page);
+
+      await page.click('#conferBtn');
+      await expect(page.locator('#stickerFound')).toBeVisible({ timeout: 15000 });
+      await expect(page.locator('#stickerMarca')).toHaveText(tires[1].marca);
+      expect(cdnRequests, 'leitor não pode depender de CDN').toEqual([]);
     });
-
-    await installCommonMocks(page, { tires: buildFakeTires(1) });
-    await bootIntoApp(page);
-    await waitForContentReady(page);
-
-    await page.click('#conferBtn');
-    // Se o jsQR não carregasse, #scannerStatus ficaria visível com a mensagem
-    // de erro de biblioteca externa em vez de sumir (câmera "ligada").
-    await expect(page.locator('#scannerStatus')).toBeHidden({ timeout: 15000 });
-  });
+  }
 });

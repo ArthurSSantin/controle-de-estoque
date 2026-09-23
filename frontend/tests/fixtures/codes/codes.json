@@ -1,0 +1,37 @@
+[
+  {
+    "file": "qr.png",
+    "format": "qr_code",
+    "text": "PNEU-00042"
+  },
+  {
+    "file": "qr-utf8.png",
+    "format": "qr_code",
+    "text": "Pneu 205/55 R16 — ção"
+  },
+  {
+    "file": "ean13.png",
+    "format": "ean_13",
+    "text": "7891234567895"
+  },
+  {
+    "file": "upca.png",
+    "format": "upc_a",
+    "text": "036000291452"
+  },
+  {
+    "file": "ean8.png",
+    "format": "ean_8",
+    "text": "96385074"
+  },
+  {
+    "file": "code128.png",
+    "format": "code_128",
+    "text": "PNEU-00042-B"
+  },
+  {
+    "file": "code39.png",
+    "format": "code_39",
+    "text": "PNEU-42"
+  }
+]
