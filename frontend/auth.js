@@ -1,11 +1,10 @@
 (function(){
   const cfg = window.APP_CONFIG || {};
-  const supabase = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
-  window.__supabaseAuth = supabase.auth;
+  const auth = window.AuthClient.create(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
   // Usado pelo app.js para anexar o token em cada chamada à API.
   window.getAccessToken = async function(){
-    const { data } = await supabase.auth.getSession();
+    const { data } = await auth.getSession();
     return data.session ? data.session.access_token : null;
   };
 
@@ -66,7 +65,7 @@
     btn.disabled = true;
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await auth.signInWithPassword({ email, password });
     btn.disabled = false;
     if(error){
       loginErr.textContent = error.message.includes('Invalid login')
@@ -92,7 +91,7 @@
       btn.disabled = false;
       return;
     }
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await auth.signUp({ email, password });
     btn.disabled = false;
     if(error){
       signupErr.textContent = error.message.includes('already registered')
@@ -109,10 +108,10 @@
   });
 
   document.getElementById('logoutBtn').onclick = async ()=>{
-    await supabase.auth.signOut();
+    await auth.signOut();
   };
 
-  supabase.auth.onAuthStateChange((event, session)=>{
+  auth.onAuthStateChange((event, session)=>{
     if(session){
       showApp(session.user.email);
     } else {
@@ -121,7 +120,7 @@
   });
 
   // Verificação inicial da sessão ao carregar a página.
-  supabase.auth.getSession().then(({ data })=>{
+  auth.getSession().then(({ data })=>{
     if(data.session){
       showApp(data.session.user.email);
     } else {

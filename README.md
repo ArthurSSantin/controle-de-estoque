@@ -19,7 +19,7 @@ Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas
 
 ## Stack
 
-- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Geração de `.xlsx` (`frontend/xlsx-writer.js` + `frontend/zip-writer.js`), de `.pdf` (`frontend/pdf-writer.js` + `frontend/pdf-table.js`) e leitura de `.csv` (`frontend/csv-parser.js`) implementadas do zero, sem dependência de terceiros. A leitura de relatórios em PDF (import/sincronização) usa `pdf.js` via CDN com Subresource Integrity — só extração de texto, não geração.
+- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Geração de `.xlsx` (`frontend/xlsx-writer.js` + `frontend/zip-writer.js`), de `.pdf` (`frontend/pdf-writer.js` + `frontend/pdf-table.js`) e leitura de `.csv` (`frontend/csv-parser.js`) implementadas do zero, sem dependência de terceiros. Login/cadastro/sessão via cliente próprio da API do Supabase Auth (`frontend/auth-client.js`), sem supabase-js. A leitura de relatórios em PDF (import/sincronização) usa `pdf.js` via CDN com Subresource Integrity — só extração de texto, não geração.
 - **Backend:** Supabase Edge Function (Deno), sem dependências — roteamento, CORS e acesso ao banco (PostgREST) e à autenticação (GoTrue) feitos direto com `fetch`. Testes em `supabase/tests/` (`node --experimental-strip-types --test supabase/tests/api.test.mjs`).
 - **Banco de dados:** Supabase (PostgreSQL) com autenticação e RLS.
 - **Testes:** suíte end-to-end com Playwright (`frontend/tests/`), rodando automaticamente em todo push/PR via GitHub Actions.
