@@ -9,7 +9,7 @@
  * extraídas inspecionando o content stream bruto de um PDF real gerado pela
  * combinação jsPDF+autoTable que este módulo substitui — não são "chutadas",
  * são pra reproduzir o mesmo resultado visual que já existia:
- *   header: fundo RGB(227,166,43), texto branco em negrito, 8pt
+ *   header: fundo RGB(215,25,32) (vermelho da empresa), texto branco em negrito, 8pt
  *   corpo: linhas alternando branco/RGB(245,245,245), texto RGB(80,80,80), 8pt
  *   padding de célula: 5pt em todas as direções
  *   sem borda visível (só preenchimento, sem contorno)
@@ -52,7 +52,7 @@
   const AVG_CHAR_WIDTH_FACTOR = 0.5;
   const BASELINE_OFFSET_FACTOR = 0.85;
 
-  const HEADER_FILL = [227, 166, 43];
+  const HEADER_FILL = [215, 25, 32]; // vermelho da empresa
   const HEADER_TEXT = [255, 255, 255];
   // Índice 0 = primeira linha do corpo (cinza-claro), índice 1 = branco —
   // ordem confirmada no PDF de referência (autoTable começa pelo cinza).
