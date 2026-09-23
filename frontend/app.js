@@ -2703,4 +2703,5 @@
   });
 
   window.__bootApp = load;
+  if (window.__bootPending) load(); // auth.js já tinha sessão antes deste arquivo rodar
 })();

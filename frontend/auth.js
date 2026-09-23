@@ -31,9 +31,12 @@
     authScreen.style.display = 'none';
     appScreen.style.display = 'block';
     userEmailEl.textContent = email || '';
-    if(!appStarted && typeof window.__bootApp === 'function'){
+    if(!appStarted){
       appStarted = true;
-      window.__bootApp();
+      // Sessão salva resolve sem rede, às vezes antes do app.js rodar:
+      // aí só marca, e o app.js carrega o estoque ao terminar de carregar.
+      if(typeof window.__bootApp === 'function') window.__bootApp();
+      else window.__bootPending = true;
     }
   }
 
