@@ -47,7 +47,6 @@
   .app-main{margin:0;min-width:0;width:100%;max-width:none;}
 
   /* HEADER */
-  .header{display:contents;}
   .brand{display:flex;align-items:center;gap:12px;}
   .brand-mark{
     width:42px;height:42px;border-radius:50%;
@@ -216,7 +215,7 @@
       flex-direction:column;
       flex-wrap:nowrap;
       align-items:stretch;
-      justify-content:space-between;
+      justify-content:flex-start;
       position:fixed;
       left:0;top:0;bottom:0;
       width:240px;
@@ -257,7 +256,7 @@
       align-items:flex-start;
       gap:10px;
       padding-top:16px;
-      margin-top:16px;
+      margin-top:auto;
       border-top:1px solid #3A352D;
     }
     .app-sidebar .user-bar span{color:#B9B2A4;font-size:12.5px;}
