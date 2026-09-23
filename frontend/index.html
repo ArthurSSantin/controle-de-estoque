@@ -14,7 +14,7 @@
   precisa setar "Content-Security-Policy: frame-ancestors 'self'" (ou
   X-Frame-Options) no servidor/CDN pra ter proteção contra clickjacking.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://oytoeuoehoqdkhnhuuyy.supabase.co https://cdnjs.cloudflare.com; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://oytoeuoehoqdkhnhuuyy.supabase.co https://cdnjs.cloudflare.com; base-uri 'self'; form-action 'self'; object-src 'none'">
 <title>Controle de Estoque de Pneus</title>
 
 <!-- PWA -->
@@ -614,6 +614,7 @@
 <script src="csv-parser.js" defer></script>
 <script src="pdf-writer.js" defer></script>
 <script src="pdf-table.js" defer></script>
+<script src="code-reader.js" defer></script>
 <script src="app.js" defer></script>
 <script src="sw-register.js" defer></script>
 </body>

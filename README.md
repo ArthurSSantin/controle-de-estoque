@@ -19,7 +19,7 @@ Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas
 
 ## Stack
 
-- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Geração de `.xlsx` (`frontend/xlsx-writer.js` + `frontend/zip-writer.js`), de `.pdf` (`frontend/pdf-writer.js` + `frontend/pdf-table.js`) e leitura de `.csv` (`frontend/csv-parser.js`) implementadas do zero, sem dependência de terceiros. Login/cadastro/sessão via cliente próprio da API do Supabase Auth (`frontend/auth-client.js`), sem supabase-js. A leitura de relatórios em PDF (import/sincronização) usa `pdf.js` via CDN com Subresource Integrity — só extração de texto, não geração.
+- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Geração de `.xlsx` (`frontend/xlsx-writer.js` + `frontend/zip-writer.js`), de `.pdf` (`frontend/pdf-writer.js` + `frontend/pdf-table.js`) e leitura de `.csv` (`frontend/csv-parser.js`) implementadas do zero, sem dependência de terceiros. Login/cadastro/sessão via cliente próprio da API do Supabase Auth (`frontend/auth-client.js`), sem supabase-js. Leitura de QR code e código de barras (EAN-13, UPC-A, EAN-8, Code 128, Code 39) pela câmera usa a BarcodeDetector nativa quando o navegador tem, senão o leitor próprio `frontend/code-reader.js` — sem jsQR. A leitura de relatórios em PDF (import/sincronização) usa `pdf.js` via CDN com Subresource Integrity — só extração de texto, não geração.
 - **Backend:** Supabase Edge Function (Deno), sem dependências — roteamento, CORS e acesso ao banco (PostgREST) e à autenticação (GoTrue) feitos direto com `fetch`. Testes em `supabase/tests/` (`node --experimental-strip-types --test supabase/tests/api.test.mjs`).
 - **Banco de dados:** Supabase (PostgreSQL) com autenticação e RLS.
 - **Testes:** suíte end-to-end com Playwright (`frontend/tests/`), rodando automaticamente em todo push/PR via GitHub Actions.
@@ -32,7 +32,9 @@ controle-de-estoque/
 │   ├── index.html
 │   ├── style.css
 │   ├── auth.css
-│   ├── auth.js          # login, cadastro e logout via Supabase Auth
+│   ├── auth-client.js   # cliente próprio da API do Supabase Auth (sessão, refresh)
+│   ├── auth.js          # telas de login, cadastro e logout
+│   ├── code-reader.js   # leitor próprio de QR code e código de barras
 │   ├── app.js            # CRUD de pneus, importação, filtros, histórico, dashboard, exportação
 │   ├── config.js          # URL da API e chaves públicas do Supabase
 │   ├── manifest.json      # manifesto do PWA
@@ -41,9 +43,10 @@ controle-de-estoque/
 │   └── tests/             # suíte de testes end-to-end (Playwright) — ver frontend/tests/README.md
 │
 ├── supabase/
-│   └── functions/
-│       └── api/
-│           └── index.ts  # rotas de pneus e histórico (Edge Function)
+│   ├── functions/
+│   │   └── api/
+│   │       └── index.ts  # rotas de pneus e histórico (Edge Function)
+│   └── tests/            # testes da API contra um Supabase falso
 │
 ├── database/
 │   ├── schema.sql
@@ -53,7 +56,8 @@ controle-de-estoque/
 │
 └── .github/
     └── workflows/
-        └── frontend-tests.yml  # roda a suíte de testes em todo push/PR
+        ├── frontend-tests.yml  # roda a suíte de testes em todo push/PR
+        └── backend-tests.yml   # testes da Edge Function
 ```
 
 ## Como rodar

@@ -26,6 +26,8 @@ npm test
 | `specs/smoke.spec.js` | O app carrega sem erro de console, estatísticas batem, as 4 abas trocam, manifest/ícones/service worker do PWA estão ok. |
 | `specs/functional.spec.js` | Fluxos de uso real: cadastrar/editar/excluir (com desfazer) pneu, busca/filtro/ordenação, pop-out fecha ao clicar fora, seleção de colunas e exportação (.xlsx/PDF). |
 | `specs/performance.spec.js` | Tempo até o estoque aparecer na tela, com limites (thresholds) — pego duplicatas, estoque grande (1000 itens) e falha de rede (cache offline). |
+| `specs/auth.spec.js` | Cliente de login próprio (`auth-client.js`) contra um Supabase Auth falso: login, cadastro, logout, refresh de token, sessão antiga, link de confirmação. |
+| `specs/code-reader.spec.js` | Leitor próprio de QR/código de barras (`code-reader.js`) com as imagens de `fixtures/codes/` (conferidas com o zbar): todos os formatos em 4 orientações, sem falso positivo, Reed-Solomon e tempo por quadro. |
 | `specs/regressions.spec.js` | Um teste por bug real já corrigido neste projeto (ver comentário no topo de cada `describe`) — existe pra esse bug nunca mais voltar sem ninguém perceber. |
 
 ## Como funciona o mock (`helpers/mock-app.js`)

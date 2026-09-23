@@ -2126,31 +2126,11 @@
   /* =========================================================================
      10g. LEITOR DE CÓDIGO (compartilhado entre o campo do formulário e a
      conferência de estoque)
-     Usa a BarcodeDetector API nativa do navegador quando disponível — ela lê
-     código de barras real (o que já vem de fábrica/nota na etiqueta do
-     pneu). Em navegadores sem suporte (ex: Firefox, Safari mais antigos),
-     cai para o jsQR, que só lê QR code — nesse caso a leitura de código de
-     barras não funciona, só de QR.
+     Usa a BarcodeDetector API nativa do navegador quando disponível
+     (Android/Chrome, macOS). Nos outros (iPhone/Safari, Firefox, Chrome no
+     Windows) usa o leitor próprio em code-reader.js — QR code, EAN-13,
+     UPC-A, EAN-8, Code 128 e Code 39, sem biblioteca de terceiros.
   ========================================================================= */
-
-  // ATENÇÃO: jsQR não existe no cdnjs (a URL antiga aqui, cdnjs.cloudflare.com/
-  // ajax/libs/jsQR/..., dava 404 — o fallback de QR code nunca funcionou em
-  // navegador sem BarcodeDetector nativo, ex: Firefox/Safari). Serve pelo
-  // jsDelivr, que espelha o pacote npm oficial (`jsqr`) e já está liberado no
-  // script-src da CSP (usado pelo supabase-js). Usa o arquivo NÃO minificado
-  // (dist/jsQR.js) de propósito: o dist/jsQR.min.js do jsDelivr é gerado
-  // dinamicamente (minificação sob demanda) e o próprio jsDelivr avisa pra
-  // NUNCA usar SRI nesses arquivos, já que o binário pode mudar entre
-  // deploys deles sem mudar de versão — travaria o carregamento pra sempre.
-  // dist/jsQR.js é o artefato publicado de verdade no pacote npm da versão
-  // 1.4.0, imutável, seguro pra fixar hash.
-  const JSQR_CDN = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-  // SHA-384 do arquivo exato dessa versão — recalcule com:
-  // openssl dgst -sha384 -binary arquivo.js | openssl base64 -A
-  const JSQR_INTEGRITY = 'sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx';
-  async function ensureJsQR() {
-    if (typeof jsQR === 'undefined') await loadScriptOnce(JSQR_CDN, JSQR_INTEGRITY);
-  }
 
   const BARCODE_FORMATS = [
     'qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'codabar', 'itf', 'data_matrix',
@@ -2179,21 +2159,27 @@
       };
     }
 
-    // Fallback: só lê QR code.
-    await ensureJsQR();
     return async (canvas) => {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-      return code ? code.data : null;
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = window.CodeReader.decode(img.data, img.width, img.height);
+      return code ? code.text : null;
     };
+  }
+
+  // EAN-13 começando com 0 é o mesmo código que o UPC-A de 12 dígitos — um
+  // leitor devolve 13, outro 12. Compara sem esse 0.
+  function normalizeScannedCode(code) {
+    const c = String(code || '').trim();
+    return /^0\d{12}$/.test(c) ? c.slice(1) : c;
   }
 
   // Encontra o pneu cujo código de barras cadastrado bate com o que foi lido.
   function findTireByScannedCode(text) {
     const raw = String(text || '').trim();
     if (!raw) return null;
-    return tires.find((t) => t.codigoBarras && t.codigoBarras.trim() === raw) || null;
+    const code = normalizeScannedCode(raw);
+    return tires.find((t) => t.codigoBarras && normalizeScannedCode(t.codigoBarras) === code) || null;
   }
 
   /* =========================================================================
