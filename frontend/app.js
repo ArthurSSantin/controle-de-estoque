@@ -71,6 +71,20 @@
       if (!res.ok) throw new Error((await safeErr(res)) || 'Falha ao registrar conferência');
       return res.json();
     },
+    async settings() {
+      const res = await fetch(`${API_BASE}/settings`, { headers: await authHeaders() });
+      if (!res.ok) throw new Error('Falha ao carregar as configurações');
+      return res.json();
+    },
+    async saveSettings(value) {
+      const res = await fetch(`${API_BASE}/settings`, {
+        method: 'PUT',
+        headers: await authHeaders(),
+        body: JSON.stringify(value),
+      });
+      if (!res.ok) throw new Error((await safeErr(res)) || 'Falha ao salvar as configurações');
+      return res.json();
+    },
     async history(limit, filters) {
       const params = new URLSearchParams();
       if (limit) params.set('limit', limit);
@@ -549,6 +563,7 @@
 
   async function load() {
     tiresOffset = 0;
+    loadBranding(); // em paralelo: a marca não depende do estoque
     try {
       const page = await api.list(0, TIRES_PAGE_SIZE);
       tires = page.items;
@@ -1158,14 +1173,18 @@
 
   /* =========================================================================
      10. IMPORTAÇÃO POR PLANILHA (Excel/CSV) OU PDF DE RELATÓRIO
-     O xlsx e o pdf.js são bibliotecas pesadas usadas só nessa tela — em vez
-     de carregá-las em toda visita ao site, elas só são baixadas na primeira
-     vez que o usuário realmente abre a importação. Isso deixa o carregamento
-     inicial do app bem mais rápido.
+     O pdf.js é pesado (1,4 MB com o worker) e só serve nessa tela — por isso
+     é carregado sob demanda, na primeira vez que o usuário abre a
+     importação, em vez de entrar em toda visita ao site. Ele fica em
+     frontend/vendor/, servido pela própria origem do app: o carregamento é
+     local, não depende de CDN nem de internet.
   ========================================================================= */
 
   const SCRIPT_LOAD_TIMEOUT_MS = 12000;
   const scriptLoadCache = {};
+  // `integrity` continua aceito, mas hoje nenhum chamador passa: todo script
+  // carregado aqui vem de vendor/, na mesma origem — SRI só é aceito pelo
+  // navegador (e só faz sentido) pra script de origem externa.
   function loadScriptOnce(src, integrity) {
     if (!scriptLoadCache[src]) {
       scriptLoadCache[src] = new Promise((resolve, reject) => {
@@ -1182,7 +1201,7 @@
         };
 
         const timer = setTimeout(() => {
-          fail(new Error('A biblioteca demorou demais pra carregar. Verifique sua conexão ou desative bloqueadores de anúncio/rastreamento e tente de novo.'));
+          fail(new Error('O leitor de PDF demorou demais pra carregar. Recarregue a página e tente de novo.'));
         }, SCRIPT_LOAD_TIMEOUT_MS);
 
         const tag = document.createElement('script');
@@ -1201,7 +1220,7 @@
         };
         tag.onerror = () => {
           clearTimeout(timer);
-          fail(new Error('Não foi possível carregar uma biblioteca externa. Verifique sua conexão ou desative bloqueadores de anúncio/rastreamento e tente de novo.'));
+          fail(new Error('Não foi possível carregar o leitor de PDF. Recarregue a página e tente de novo.'));
         };
         document.head.appendChild(tag);
       });
@@ -1210,45 +1229,21 @@
   }
 
   // pdf.js abaixo é só pra LEITURA de relatório em PDF (import/sincronização)
-  // — a GERAÇÃO de PDF (exportação de estoque) não depende de CDN nem de lib
-  // de terceiro nenhuma: é frontend/pdf-writer.js + pdf-table.js, do mesmo
-  // jeito que a exportação em .xlsx é xlsx-writer.js + zip-writer.js.
-  const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-  // SHA-384 do arquivo exato dessa versão (cdnjs) — trava a versão contra
-  // adulteração do CDN. Se algum dia atualizar PDFJS_CDN/PDFJS_WORKER_CDN,
-  // recalcule com: openssl dgst -sha384 -binary arquivo.js | openssl base64 -A
-  const PDFJS_INTEGRITY = 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e';
-  const PDFJS_WORKER_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const PDFJS_WORKER_INTEGRITY = 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2';
+  // — a GERAÇÃO de PDF (exportação de estoque) não depende dele: é
+  // frontend/pdf-writer.js + pdf-table.js, do mesmo jeito que a exportação
+  // em .xlsx é xlsx-writer.js + zip-writer.js.
+  //
+  // Vendorizado em frontend/vendor/ (versão e hashes em vendor/README.md):
+  // o app não busca mais nada em CDN em tempo de execução. Como os dois
+  // arquivos passaram a ser servidos pela própria origem do app, saíram
+  // junto o SRI e a conferência de hash na mão — os dois existiam pra
+  // proteger contra um CDN adulterado, e não há mais CDN no caminho. Quem
+  // conseguisse trocar vendor/pdf.min.js já poderia trocar o app.js do lado.
+  const PDFJS_SRC = 'vendor/pdf.min.js';
+  const PDFJS_WORKER_SRC = 'vendor/pdf.worker.min.js';
 
   async function ensurePdfJs() {
-    if (typeof pdfjsLib === 'undefined') await loadScriptOnce(PDFJS_CDN, PDFJS_INTEGRITY);
-  }
-
-  // O <script src> do pdf.min.js já é protegido por SRI nativo (acima), mas
-  // o worker é carregado pelo próprio pdf.js via `new Worker(workerSrc)` —
-  // a API Worker não tem suporte a `integrity`. Pra não servir esse segundo
-  // arquivo sem nenhuma verificação, baixamos e conferimos o hash na mão
-  // antes de rodá-lo, entregando o worker via blob: (mesma origem).
-  let pdfWorkerBlobUrlPromise = null;
-  async function ensurePdfWorkerBlobUrl() {
-    if (!pdfWorkerBlobUrlPromise) {
-      pdfWorkerBlobUrlPromise = (async () => {
-        const res = await fetch(PDFJS_WORKER_CDN);
-        if (!res.ok) throw new Error('Não foi possível baixar o worker do pdf.js.');
-        const buffer = await res.arrayBuffer();
-        const digest = await crypto.subtle.digest('SHA-384', buffer);
-        const hashB64 = btoa(String.fromCharCode(...new Uint8Array(digest)));
-        if (`sha384-${hashB64}` !== PDFJS_WORKER_INTEGRITY) {
-          throw new Error('Falha na verificação de integridade do worker do pdf.js.');
-        }
-        return URL.createObjectURL(new Blob([buffer], { type: 'application/javascript' }));
-      })().catch((err) => {
-        pdfWorkerBlobUrlPromise = null; // permite tentar de novo
-        throw err;
-      });
-    }
-    return pdfWorkerBlobUrlPromise;
+    if (typeof pdfjsLib === 'undefined') await loadScriptOnce(PDFJS_SRC);
   }
   function normalizeHeader(h) {
     return String(h || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -1339,7 +1334,7 @@
    */
   async function extractPdfLines(file) {
     await ensurePdfJs();
-    pdfjsLib.GlobalWorkerOptions.workerSrc = await ensurePdfWorkerBlobUrl();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
 
     const buffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -2113,7 +2108,7 @@
 
     const doc = PdfWriter.createDocument({ orientation: 'landscape' });
     PdfTable.renderReport(doc, {
-      title: 'Estoque de Pneus',
+      title: brandingName(),
       subtitle: `Gerado em ${new Date().toLocaleDateString('pt-BR')} — ${rows.length} item(ns)`,
       columns,
       rows: body,
@@ -2530,6 +2525,346 @@
   }
 
   /* =========================================================================
+     10j. CONFIGURAÇÕES DA CONTA (nome do sistema e logo)
+     O valor que vale é o do backend (GET/PUT /api/settings, uma linha por
+     conta protegida por RLS). O branding.js só aplica na tela e guarda um
+     cache local chaveado pelo usuário — ver o cabeçalho daquele arquivo.
+     A logo é recortada aqui mesmo, num canvas, e sai sempre como um quadrado
+     de 256x256: o mesmo círculo da logo padrão, no mesmo tamanho.
+  ========================================================================= */
+
+  const LOGO_OUTPUT_SIZE = 256;   // lado do quadrado salvo
+  const CROP_VIEW = 260;          // lado do palco de recorte, em px lógicos
+  const CROP_MAX_ZOOM = 4;
+  const MAX_LOGO_FILE_BYTES = 8 * 1024 * 1024;
+  // Teto do data URL salvo. O backend recusa acima de 300k — aqui fica
+  // folgado pra nunca esbarrar lá por um punhado de caracteres.
+  const MAX_LOGO_CHARS = 200000;
+  // A imagem de origem é reduzida antes do recorte: deixa o arrasto leve e
+  // evita o serrilhado de reduzir 4000px pra 256px num passo só.
+  const CROP_SOURCE_MAX = 1200;
+
+  const settingsPanel = document.getElementById('settingsPanel');
+  const settingsErr = document.getElementById('settingsErr');
+  const setAppNameInput = document.getElementById('setAppName');
+  const setLogoInput = document.getElementById('setLogoInput');
+  const settingsLogoPreview = document.getElementById('settingsLogoPreview');
+  const settingsCrop = document.getElementById('settingsCrop');
+  const cropStage = document.getElementById('cropStage');
+  const cropCanvas = document.getElementById('cropCanvas');
+  const cropZoom = document.getElementById('cropZoom');
+
+  // Logo que a tela vai salvar: 'keep' mantém a atual, 'default' volta pro
+  // padrão, uma string data URL é a nova imagem já recortada.
+  let pendingLogo = 'keep';
+  // Estado do recorte (em px lógicos do palco): imagem, zoom e deslocamento.
+  let crop = null;
+
+  function brandingName() {
+    return (window.Branding && window.Branding.appName()) || 'Estoque de Pneus';
+  }
+
+  async function loadBranding() {
+    if (!window.Branding) return;
+    const forUser = window.Branding.userId();
+    try {
+      const remote = await api.settings();
+      window.Branding.applyRemote(remote, forUser);
+    } catch (e) {
+      // Offline ou API fora: fica o que veio do cache local dessa conta.
+      console.error('Falha ao carregar a personalização:', e);
+    }
+  }
+
+  /* ---------- prévia ---------- */
+
+  function previewLogo() {
+    if (pendingLogo === 'default') return null;
+    if (pendingLogo === 'keep') return window.Branding ? window.Branding.current().logo : null;
+    return pendingLogo;
+  }
+
+  function renderLogoPreview() {
+    const logo = previewLogo();
+    if (logo) {
+      settingsLogoPreview.style.setProperty('--preview-logo', 'url("' + logo + '")');
+      settingsLogoPreview.classList.add('has-preview');
+    } else {
+      settingsLogoPreview.style.removeProperty('--preview-logo');
+      settingsLogoPreview.classList.remove('has-preview');
+    }
+  }
+
+  /* ---------- recorte ---------- */
+
+  function clampCrop() {
+    // Zoom 1 = a imagem cobre o palco exatamente; o deslocamento é limitado
+    // pra nunca sobrar buraco nos cantos.
+    const drawn = { w: crop.natural.w * crop.scale, h: crop.natural.h * crop.scale };
+    crop.x = Math.min(0, Math.max(CROP_VIEW - drawn.w, crop.x));
+    crop.y = Math.min(0, Math.max(CROP_VIEW - drawn.h, crop.y));
+    return drawn;
+  }
+
+  function drawCrop() {
+    if (!crop) return;
+    const drawn = clampCrop();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (cropCanvas.width !== Math.round(CROP_VIEW * dpr)) {
+      cropCanvas.width = Math.round(CROP_VIEW * dpr);
+      cropCanvas.height = Math.round(CROP_VIEW * dpr);
+    }
+    const ctx = cropCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, CROP_VIEW, CROP_VIEW);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(crop.source, crop.x, crop.y, drawn.w, drawn.h);
+  }
+
+  /** Redesenha o recorte no tamanho final e devolve o canvas. */
+  function renderCropTo(size, background) {
+    const drawn = clampCrop();
+    const k = size / CROP_VIEW;
+    const out = document.createElement('canvas');
+    out.width = size;
+    out.height = size;
+    const ctx = out.getContext('2d');
+    if (background) {
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, size, size);
+    }
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(crop.source, crop.x * k, crop.y * k, drawn.w * k, drawn.h * k);
+    return out;
+  }
+
+  /**
+   * Codifica o recorte no menor formato que o navegador aceitar e que caiba
+   * no limite. WebP e PNG primeiro porque guardam transparência; o JPEG só
+   * entra se os dois estourarem, e aí sobre fundo branco (JPEG não tem
+   * canal alpha — sem o fundo, o que era transparente sairia preto).
+   */
+  function encodeLogo() {
+    const attempts = [
+      { type: 'image/webp', quality: 0.92, background: null },
+      { type: 'image/png', quality: undefined, background: null },
+      { type: 'image/jpeg', quality: 0.85, background: '#FFFFFF' },
+      { type: 'image/jpeg', quality: 0.6, background: '#FFFFFF' },
+    ];
+    let menor = null;
+    for (const attempt of attempts) {
+      let url;
+      try {
+        url = renderCropTo(LOGO_OUTPUT_SIZE, attempt.background).toDataURL(attempt.type, attempt.quality);
+      } catch (e) {
+        continue;
+      }
+      // Navegador sem suporte ao formato devolve PNG calado — nesse caso a
+      // tentativa não conta (a de PNG logo abaixo cobre o caso).
+      if (url.indexOf('data:' + attempt.type) !== 0) continue;
+      if (url.length <= MAX_LOGO_CHARS) return url;
+      if (!menor || url.length < menor.length) menor = url;
+    }
+    return menor;
+  }
+
+  function closeCrop() {
+    crop = null;
+    settingsCrop.hidden = true;
+    setLogoInput.value = '';
+  }
+
+  function openCrop(img) {
+    // Reduz a origem uma vez só, antes de qualquer arrasto.
+    const maior = Math.max(img.naturalWidth, img.naturalHeight);
+    let source = img;
+    if (maior > CROP_SOURCE_MAX) {
+      const fator = CROP_SOURCE_MAX / maior;
+      source = document.createElement('canvas');
+      source.width = Math.max(1, Math.round(img.naturalWidth * fator));
+      source.height = Math.max(1, Math.round(img.naturalHeight * fator));
+      const ctx = source.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, source.width, source.height);
+    }
+
+    const w = source.width || source.naturalWidth;
+    const h = source.height || source.naturalHeight;
+    // "cover": a menor dimensão encosta nas bordas do palco.
+    const base = Math.max(CROP_VIEW / w, CROP_VIEW / h);
+    crop = {
+      source,
+      natural: { w, h },
+      base,
+      zoom: 1,
+      scale: base,
+      x: (CROP_VIEW - w * base) / 2,
+      y: (CROP_VIEW - h * base) / 2,
+    };
+    cropZoom.value = '1';
+    settingsCrop.hidden = false;
+    drawCrop();
+  }
+
+  function applyZoom(zoom) {
+    if (!crop) return;
+    const anterior = crop.scale;
+    crop.zoom = Math.min(CROP_MAX_ZOOM, Math.max(1, zoom));
+    crop.scale = crop.base * crop.zoom;
+    // Mantém o centro do palco no mesmo ponto da imagem ao ampliar.
+    const fator = crop.scale / anterior;
+    crop.x = CROP_VIEW / 2 - (CROP_VIEW / 2 - crop.x) * fator;
+    crop.y = CROP_VIEW / 2 - (CROP_VIEW / 2 - crop.y) * fator;
+    drawCrop();
+  }
+
+  function loadImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          if (!img.naturalWidth || !img.naturalHeight) reject(new Error('Imagem inválida.'));
+          else resolve(img);
+        };
+        img.onerror = () => reject(new Error('Imagem inválida.'));
+        img.src = reader.result;
+      };
+      // data URL (e não createObjectURL) porque a CSP da página libera
+      // img-src pra 'self' e data:, mas não pra blob:.
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function onLogoFileChosen(file) {
+    settingsErr.classList.remove('show');
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+      settingsErr.textContent = 'Formato não suportado. Use PNG, JPG ou WebP.';
+      settingsErr.classList.add('show');
+      setLogoInput.value = '';
+      return;
+    }
+    if (file.size > MAX_LOGO_FILE_BYTES) {
+      settingsErr.textContent = 'Imagem muito pesada (máximo 8 MB).';
+      settingsErr.classList.add('show');
+      setLogoInput.value = '';
+      return;
+    }
+    try {
+      openCrop(await loadImageFile(file));
+    } catch (e) {
+      settingsErr.textContent = 'Não foi possível abrir essa imagem. Tente outra.';
+      settingsErr.classList.add('show');
+      setLogoInput.value = '';
+    }
+  }
+
+  /* ---------- arrastar pra posicionar ---------- */
+
+  let cropDrag = null;
+
+  cropStage.addEventListener('pointerdown', (e) => {
+    if (!crop) return;
+    // O palco pode estar exibido menor que CROP_VIEW (celular): converte o
+    // movimento do dedo/mouse pra px lógicos do palco.
+    const rect = cropStage.getBoundingClientRect();
+    cropDrag = {
+      id: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: crop.x,
+      originY: crop.y,
+      ratio: rect.width ? CROP_VIEW / rect.width : 1,
+    };
+    cropStage.setPointerCapture(e.pointerId);
+    cropStage.classList.add('dragging');
+  });
+
+  cropStage.addEventListener('pointermove', (e) => {
+    if (!cropDrag || cropDrag.id !== e.pointerId) return;
+    crop.x = cropDrag.originX + (e.clientX - cropDrag.startX) * cropDrag.ratio;
+    crop.y = cropDrag.originY + (e.clientY - cropDrag.startY) * cropDrag.ratio;
+    drawCrop();
+  });
+
+  function endCropDrag(e) {
+    if (!cropDrag || cropDrag.id !== e.pointerId) return;
+    cropDrag = null;
+    cropStage.classList.remove('dragging');
+  }
+  cropStage.addEventListener('pointerup', endCropDrag);
+  cropStage.addEventListener('pointercancel', endCropDrag);
+
+  cropStage.addEventListener('wheel', (e) => {
+    if (!crop) return;
+    e.preventDefault();
+    const passo = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+    applyZoom(crop.zoom * passo);
+    cropZoom.value = String(crop.zoom);
+  }, { passive: false });
+
+  cropZoom.oninput = (e) => applyZoom(Number(e.target.value));
+
+  /* ---------- abrir / fechar / salvar ---------- */
+
+  function openSettings() {
+    const atual = window.Branding ? window.Branding.current() : { appName: null, logo: null };
+    setAppNameInput.value = atual.appName || '';
+    setAppNameInput.placeholder = (window.Branding && window.Branding.DEFAULT_APP_NAME) || 'Estoque de Pneus';
+    pendingLogo = 'keep';
+    closeCrop();
+    renderLogoPreview();
+    settingsErr.classList.remove('show');
+    settingsPanel.classList.add('open');
+    setAppNameInput.focus();
+  }
+
+  function closeSettings() {
+    settingsPanel.classList.remove('open');
+    closeCrop();
+    pendingLogo = 'keep';
+  }
+
+  async function saveSettings() {
+    settingsErr.classList.remove('show');
+
+    const appName = setAppNameInput.value.trim();
+    const maxNome = (window.Branding && window.Branding.MAX_APP_NAME_LEN) || 40;
+    if (appName.length > maxNome) {
+      settingsErr.textContent = `O nome do sistema deve ter no máximo ${maxNome} caracteres.`;
+      settingsErr.classList.add('show');
+      return;
+    }
+
+    // Com o recorte aberto, é ele que manda — o usuário escolheu a imagem e
+    // ajustou o enquadramento; salvar sem aplicar seria perder o trabalho.
+    let logo = pendingLogo;
+    if (crop) {
+      logo = encodeLogo();
+      if (!logo || logo.length > MAX_LOGO_CHARS) {
+        settingsErr.textContent = 'Não foi possível compactar essa imagem o bastante. Tente uma logo mais simples.';
+        settingsErr.classList.add('show');
+        return;
+      }
+    }
+    if (logo === 'keep') logo = window.Branding ? window.Branding.current().logo : null;
+    if (logo === 'default') logo = null;
+
+    const forUser = window.Branding ? window.Branding.userId() : null;
+    try {
+      const salvo = await api.saveSettings({ appName: appName || null, logo });
+      if (window.Branding) window.Branding.applyRemote(salvo, forUser);
+      closeSettings();
+      showToast('Configurações salvas.');
+    } catch (e) {
+      settingsErr.textContent = e.message || 'Não foi possível salvar. Verifique sua conexão.';
+      settingsErr.classList.add('show');
+    }
+  }
+
+  /* =========================================================================
      11. EVENTOS
   ========================================================================= */
 
@@ -2630,6 +2965,23 @@
   document.getElementById('scanCodigoBtn').onclick = openScanOnceModal;
   document.getElementById('cancelScanOnceBtn').onclick = closeScanOnceModal;
 
+  document.getElementById('settingsBtn').onclick = openSettings;
+  document.getElementById('closeSettingsBtn').onclick = closeSettings;
+  document.getElementById('cancelSettingsBtn').onclick = closeSettings;
+  document.getElementById('saveSettingsBtn').onclick = () =>
+    withButtonBusy(document.getElementById('saveSettingsBtn'), 'Salvando...', saveSettings);
+  setLogoInput.onchange = (e) => onLogoFileChosen(e.target.files && e.target.files[0]);
+  document.getElementById('setLogoResetBtn').onclick = () => {
+    closeCrop();
+    pendingLogo = 'default';
+    renderLogoPreview();
+  };
+  document.getElementById('cropCancelBtn').onclick = () => {
+    closeCrop();
+    pendingLogo = 'keep';
+    renderLogoPreview();
+  };
+
   document.getElementById('conferScanBtn').onclick = openConferScanModal;
   document.getElementById('cancelConferScanBtn').onclick = closeConferScanModal;
   const debouncedConferRender = debounce(loadAndRenderConferencia, 200);
@@ -2649,6 +3001,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (document.getElementById('scanOnceModal').classList.contains('open')) return closeScanOnceModal();
+    if (settingsPanel.classList.contains('open')) return closeSettings();
     if (document.getElementById('conferScanModal').classList.contains('open')) return closeConferScanModal();
     if (syncPanel.classList.contains('open')) return closeSyncPanel();
     if (importPanel.classList.contains('open')) return closeImportPanel();
@@ -2694,6 +3047,7 @@
     scannerModal: closeScannerModal,
     stickerModal: closeStickerModal,
     conferScanModal: closeConferScanModal,
+    settingsPanel: closeSettings,
   };
   Object.keys(MODAL_CLOSERS).forEach((id) => {
     const el = document.getElementById(id);

@@ -7,7 +7,13 @@ const { test, expect } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { installCommonMocks, bootIntoApp, waitForContentReady, buildFakeTires } = require('../helpers/mock-app');
+const {
+  installCommonMocks,
+  bootIntoApp,
+  waitForContentReady,
+  buildFakeTires,
+  blockExternalRequests,
+} = require('../helpers/mock-app');
 
 async function loadPdfModules(page) {
   await page.goto('about:blank');
@@ -169,5 +175,94 @@ test.describe('Exportação em PDF — fluxo completo do app', () => {
     expect(text).toContain('(Estoque de Pneus)');
 
     fs.unlinkSync(savePath);
+  });
+});
+
+test.describe('Leitura de PDF com o pdf.js vendorizado', () => {
+  // O pdf.js saiu do cdnjs e passou a ser servido de frontend/vendor/. Estes
+  // dois testes são o que sustenta essa troca:
+  //  1. a leitura de relatório em PDF continua funcionando de ponta a ponta;
+  //  2. o app não busca mais NADA fora da própria origem.
+  // O PDF de entrada é gerado pelo pdf-writer.js do próprio projeto — o teste
+  // não depende de nenhum arquivo ou serviço de fora.
+
+  // Linhas no mesmo formato do relatório de ERP que parseStockReportLine()
+  // espera: descrição, código de barras, estoque, valor unitário, total
+  // (= estoque x unitário) e margem.
+  const LINHAS_RELATORIO = [
+    ['PNEU PIRELLI CINTURATO 185/65 R14', '7891234567895', '7,00', '350,00', '2.450,00', '25,00 %'],
+    ['PNEU GOODYEAR KELLY 175/70 R13', '7891234567901', '3,00', '300,00', '900,00', '20,00 %'],
+  ];
+
+  /** Gera, dentro da página, um relatório em PDF com as linhas informadas. */
+  async function gerarRelatorioPdf(page, linhas) {
+    return page.evaluate(async (rows) => {
+      const doc = PdfWriter.createDocument({ orientation: 'landscape' });
+      PdfTable.renderReport(doc, {
+        title: 'Relatório da empresa',
+        subtitle: 'Gerado para teste',
+        columns: ['Descrição', 'Código', 'Est.', 'Venda', 'Total', 'Lucro'],
+        rows,
+      });
+      const blob = await doc.output();
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    }, linhas);
+  }
+
+  test('importa um relatório em PDF de verdade, sem sair da própria origem', async ({ page }) => {
+    // Qualquer requisição que escaparia do servidor de teste é falha aqui.
+    const fugas = await blockExternalRequests(page);
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    const pdfBytes = await gerarRelatorioPdf(page, LINHAS_RELATORIO);
+
+    await page.click('#importBtn');
+    await page.setInputFiles('#importFileInput', {
+      name: 'relatorio-empresa.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(pdfBytes),
+    });
+
+    // O pdf.js local abriu o arquivo e o app reconheceu as duas linhas.
+    await expect(page.locator('#importRows .batch-row')).toHaveCount(2, { timeout: 20000 });
+    const lidos = await page.locator('#importRows .batch-row').evaluateAll((linhas) =>
+      linhas.map((l) => ({
+        marca: l.querySelector('.b-marca').value,
+        medida: l.querySelector('.b-medida').value,
+        qtd: l.querySelector('.b-qtd').value,
+        preco: l.querySelector('.b-preco').value,
+      }))
+    );
+    expect(lidos).toEqual([
+      { marca: 'Pirelli', medida: '185/65 R14', qtd: '7', preco: '350,00' },
+      { marca: 'Goodyear', medida: '175/70 R13', qtd: '3', preco: '300,00' },
+    ]);
+
+    expect(fugas, 'nada pode ser buscado fora da origem do app').toEqual([]);
+  });
+
+  test('o pdf.js e o worker vêm de vendor/, na mesma origem', async ({ page }) => {
+    const buscados = [];
+    page.on('request', (r) => {
+      if (/pdf\.(min|worker\.min)\.js/.test(r.url())) buscados.push(new URL(r.url()).pathname);
+    });
+
+    await installCommonMocks(page, { tires: [] });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    const pdfBytes = await gerarRelatorioPdf(page, LINHAS_RELATORIO);
+    await page.click('#importBtn');
+    await page.setInputFiles('#importFileInput', {
+      name: 'relatorio.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from(pdfBytes),
+    });
+    await expect(page.locator('#importRows .batch-row')).toHaveCount(2, { timeout: 20000 });
+
+    expect(buscados).toContain('/vendor/pdf.min.js');
+    expect(buscados).toContain('/vendor/pdf.worker.min.js');
   });
 });

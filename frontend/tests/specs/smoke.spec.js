@@ -2,7 +2,13 @@
 // básicos existem — a primeira coisa que deveria falhar se algo saiu muito
 // errado (HTML quebrado, script com erro de sintaxe, id renomeado etc).
 const { test, expect } = require('@playwright/test');
-const { buildFakeTires, installCommonMocks, bootIntoApp, waitForContentReady } = require('../helpers/mock-app');
+const {
+  buildFakeTires,
+  installCommonMocks,
+  bootIntoApp,
+  waitForContentReady,
+  blockExternalRequests,
+} = require('../helpers/mock-app');
 
 test.describe('Smoke', () => {
   // Google Fonts é bloqueado de propósito pelo mock (sem custo, sem rede
@@ -16,6 +22,28 @@ test.describe('Smoke', () => {
     });
     return errors;
   }
+
+  // Guarda de isolamento da suíte: nenhum teste pode tocar em serviço real.
+  // Cobre os dois jeitos de escapar — uma chamada de API que nenhum handler
+  // do mock atendeu (antes caía num route.continue() que ia direto pro
+  // Supabase de produção) e qualquer requisição pra fora do servidor de
+  // teste. As fontes do Google são abortadas pelo mock, então nem chegam no
+  // blockExternalRequests.
+  test('uma sessão normal não sai da própria origem nem faz chamada não simulada', async ({ page }) => {
+    const fugas = await blockExternalRequests(page);
+    const state = await installCommonMocks(page, { tires: buildFakeTires(5) });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+
+    // passa por todas as abas — cada uma dispara o seu próprio carregamento
+    for (const aba of ['historico', 'dashboard', 'exportar', 'conferencia', 'estoque']) {
+      await page.click(`.tabbar .tab[data-tab="${aba}"]`);
+      await expect(page.locator(`#tab${aba.charAt(0).toUpperCase()}${aba.slice(1)}`)).toBeVisible();
+    }
+
+    expect(state.unmocked, 'toda chamada de API precisa ter handler no mock').toEqual([]);
+    expect(fugas, 'nenhuma requisição pode sair do servidor de teste').toEqual([]);
+  });
 
   test('carrega sem erros de console/página com estoque vazio', async ({ page }) => {
     const errors = collectRealErrors(page);

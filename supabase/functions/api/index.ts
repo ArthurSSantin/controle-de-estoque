@@ -506,6 +506,81 @@ route('GET', '/history', async ({ url, token }) => {
   return json(data.map(historyToApi));
 });
 
+
+/* ===========================================================================
+   PERSONALIZAÇÃO DA CONTA (nome do sistema e logo)
+   Uma linha por conta em user_settings, protegida por RLS — o que uma conta
+   salva aqui nunca aparece pra outra. Conta sem linha = padrão do app.
+=========================================================================== */
+
+const MAX_APP_NAME_LEN = 40;
+// A logo chega como data URL base64, já recortada em 256x256 pelo frontend.
+// O teto vale mesmo se alguém chamar a API direto, sem passar pela tela.
+const MAX_LOGO_CHARS = 300_000;
+const LOGO_DATA_URL_REGEX = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+function settingsToApi(row: any) {
+  return {
+    appName: row?.app_name || null,
+    logo: row?.logo_data_url || null,
+  };
+}
+
+// GET /api/settings — null nos dois campos significa "usa o padrão".
+route('GET', '/settings', async ({ token, userId }) => {
+  const { data, error } = await db(
+    token,
+    'GET',
+    'user_settings',
+    params([['select', '*'], ['owner_id', `eq.${userId}`], ['limit', '1']]),
+  );
+  if (error) return dbErrorResponse(error);
+  return json(settingsToApi(data[0]));
+});
+
+// PUT /api/settings — substitui a personalização inteira da conta. Campo
+// ausente/vazio volta pro padrão, então "restaurar padrão" é só um PUT
+// com o campo nulo.
+route('PUT', '/settings', async ({ req, token, userId }) => {
+  const body = await readJson(req);
+
+  let appName: string | null = null;
+  if (body?.appName !== undefined && body?.appName !== null) {
+    // colapsa espaços repetidos e tira caracteres de controle — o nome vai
+    // pro cabeçalho e pro título dos relatórios exportados.
+    appName = String(body.appName).replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim();
+    if (!appName) appName = null;
+    else if (appName.length > MAX_APP_NAME_LEN) {
+      return json({ error: `O nome do sistema deve ter no máximo ${MAX_APP_NAME_LEN} caracteres.` }, 400);
+    }
+  }
+
+  let logo: string | null = null;
+  if (body?.logo !== undefined && body?.logo !== null && body.logo !== '') {
+    logo = String(body.logo);
+    if (logo.length > MAX_LOGO_CHARS) {
+      return json({ error: 'A logo ficou grande demais. Escolha uma imagem menor.' }, 400);
+    }
+    if (!LOGO_DATA_URL_REGEX.test(logo)) {
+      return json({ error: 'Logo inválida. Envie uma imagem PNG, JPG ou WebP.' }, 400);
+    }
+  }
+
+  // Upsert pela chave primária (owner_id): a primeira vez insere, as
+  // seguintes substituem — sem precisar de um GET antes.
+  const { data, error } = await db(token, 'POST', 'user_settings', params([['select', '*']]), {
+    body: {
+      owner_id: userId,
+      app_name: appName,
+      logo_data_url: logo,
+      updated_at: new Date().toISOString(),
+    },
+    prefer: 'resolution=merge-duplicates,return=representation',
+  });
+  if (error) return dbErrorResponse(error);
+  return json(settingsToApi(Array.isArray(data) ? data[0] : data));
+});
+
 /* ===========================================================================
    ENTRADA
 =========================================================================== */

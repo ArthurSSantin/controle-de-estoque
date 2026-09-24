@@ -14,12 +14,13 @@ Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas
 - Exportação do estoque para `.xlsx` ou PDF, com seleção de quais colunas incluir e ordenação automática por medida (largura → perfil → aro).
 - Histórico de movimentações (criação, edição, exclusão, entradas e saídas de quantidade) por item, com filtro por pneu e por período.
 - Dashboard com gráfico de entradas x saídas de quantidade nos últimos 14 dias.
+- Personalização por conta: cada login define o nome do sistema e a logo do cabeçalho (com recorte da imagem para o círculo padrão). O que uma conta escolhe nunca aparece para outra — quem não personaliza continua vendo o padrão.
 - Login multiempresa com isolamento de dados por conta (Row Level Security).
 - Instalável como PWA (ícone na tela inicial, abre sem barra de navegador) e com Service Worker para a casca do app continuar acessível offline.
 
 ## Stack
 
-- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Geração de `.xlsx` (`frontend/xlsx-writer.js` + `frontend/zip-writer.js`), de `.pdf` (`frontend/pdf-writer.js` + `frontend/pdf-table.js`) e leitura de `.csv` (`frontend/csv-parser.js`) implementadas do zero, sem dependência de terceiros. Login/cadastro/sessão via cliente próprio da API do Supabase Auth (`frontend/auth-client.js`), sem supabase-js. Leitura de QR code e código de barras (EAN-13, UPC-A, EAN-8, Code 128, Code 39) pela câmera usa a BarcodeDetector nativa quando o navegador tem, senão o leitor próprio `frontend/code-reader.js` — sem jsQR. A leitura de relatórios em PDF (import/sincronização) usa `pdf.js` via CDN com Subresource Integrity — só extração de texto, não geração.
+- **Frontend:** HTML, CSS e JavaScript puro, sem build step. Geração de `.xlsx` (`frontend/xlsx-writer.js` + `frontend/zip-writer.js`), de `.pdf` (`frontend/pdf-writer.js` + `frontend/pdf-table.js`) e leitura de `.csv` (`frontend/csv-parser.js`) implementadas do zero, sem dependência de terceiros. Login/cadastro/sessão via cliente próprio da API do Supabase Auth (`frontend/auth-client.js`), sem supabase-js. Leitura de QR code e código de barras (EAN-13, UPC-A, EAN-8, Code 128, Code 39) pela câmera usa a BarcodeDetector nativa quando o navegador tem, senão o leitor próprio `frontend/code-reader.js` — sem jsQR. A leitura de relatórios em PDF (import/sincronização) usa o `pdf.js`, **vendorizado em `frontend/vendor/`** e carregado sob demanda da própria origem — só extração de texto, não geração. O app não busca nenhum script de CDN em tempo de execução; o único recurso externo que resta é o Google Fonts.
 - **Backend:** Supabase Edge Function (Deno), sem dependências — roteamento, CORS e acesso ao banco (PostgREST) e à autenticação (GoTrue) feitos direto com `fetch`. Testes em `supabase/tests/` (`node --experimental-strip-types --test supabase/tests/api.test.mjs`).
 - **Banco de dados:** Supabase (PostgreSQL) com autenticação e RLS.
 - **Testes:** suíte end-to-end com Playwright (`frontend/tests/`), rodando automaticamente em todo push/PR via GitHub Actions.
@@ -34,25 +35,29 @@ controle-de-estoque/
 │   ├── auth.css
 │   ├── auth-client.js   # cliente próprio da API do Supabase Auth (sessão, refresh)
 │   ├── auth.js          # telas de login, cadastro e logout
+│   ├── branding.js      # nome e logo por conta (aplica na tela + cache por usuário)
 │   ├── code-reader.js   # leitor próprio de QR code e código de barras
 │   ├── app.js            # CRUD de pneus, importação, filtros, histórico, dashboard, exportação
 │   ├── config.js          # URL da API e chaves públicas do Supabase
 │   ├── manifest.json      # manifesto do PWA
 │   ├── sw.js              # Service Worker (cache da casca do app)
 │   ├── icons/             # ícones do PWA (inclusive o maskable)
+│   ├── vendor/            # pdf.js vendorizado (única lib de terceiros) — ver vendor/README.md
 │   └── tests/             # suíte de testes end-to-end (Playwright) — ver frontend/tests/README.md
 │
 ├── supabase/
 │   ├── functions/
 │   │   └── api/
-│   │       └── index.ts  # rotas de pneus e histórico (Edge Function)
+│   │       └── index.ts  # rotas de pneus, histórico e personalização (Edge Function)
 │   └── tests/            # testes da API contra um Supabase falso
 │
 ├── database/
 │   ├── schema.sql
 │   ├── migration_historico.sql
 │   ├── migration_fornecedor.sql
-│   └── migration_codigo_barras.sql
+│   ├── migration_codigo_barras.sql
+│   ├── migration_conferencia.sql
+│   └── migration_personalizacao.sql   # nome do sistema e logo por conta
 │
 └── .github/
     └── workflows/
@@ -110,6 +115,8 @@ Detalhes de cada teste em [`frontend/tests/README.md`](frontend/tests/README.md)
 | PUT    | `/api/tires/:id`  | atualiza um pneu                                                       |
 | DELETE | `/api/tires/:id`  | remove um pneu                                                         |
 | GET    | `/api/history`    | histórico de movimentações (`?limit=`, `?tireId=`, `?from=`, `?to=`) |
+| GET    | `/api/settings`   | personalização da conta (nome do sistema e logo)                      |
+| PUT    | `/api/settings`   | salva a personalização da conta                                       |
 
 Todas as rotas exigem um token JWT do Supabase Auth no cabeçalho `Authorization`.
 
@@ -118,6 +125,7 @@ Todas as rotas exigem um token JWT do Supabase Auth no cabeçalho `Authorization
 - Autenticação obrigatória em todas as rotas da API.
 - Isolamento de dados por conta via Row Level Security no Postgres.
 - Validação de entrada na Edge Function, independente do frontend.
+- Nenhum script carregado de CDN em tempo de execução: a única biblioteca de terceiros (`pdf.js`) é servida pela própria origem, a partir de `frontend/vendor/`. A CSP não libera host externo em `script-src` nem em `connect-src`.
 - CORS restrito por `ALLOWED_ORIGIN` (secret da function) — configure com o(s) domínio(s) reais do app publicado, sem barra no final.
 
 ## Licença

@@ -77,6 +77,23 @@
     font-weight:500;
     margin-top:2px;
   }
+  /* LOGO PERSONALIZADA DA CONTA (Configurações) — vem de uma custom property
+     no #appScreen, não elemento a elemento, então qualquer .brand-mark que o
+     render criar depois (estado vazio, figurinha do scanner) já nasce com
+     ela. A imagem é recortada em 256x256 e o border-radius do círculo faz o
+     resto: a logo personalizada ocupa exatamente o espaço da padrão. */
+  #appScreen.has-custom-logo .brand-mark{
+    background-image:var(--brand-logo);
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+    border:none;
+  }
+  #appScreen.has-custom-logo .brand-mark::after{display:none;}
+
+  .user-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .user-bar-actions{display:flex;align-items:center;gap:8px;}
+  #settingsBtn .icon{width:15px;height:15px;}
   .header-actions{
     display:flex;
     align-items:flex-end;
@@ -182,8 +199,11 @@
     .mobile-fab[hidden]{display:none;}
     .mobile-fab .icon{width:24px;height:24px;}
 
-    /* cabeçalho compacto — email sem o prefixo "Logado como" */
+    /* cabeçalho compacto — email sem o prefixo "Logado como" e
+       Configurações só com o ícone, pra caber ao lado do "Sair" */
     .user-bar-prefix{display:none;}
+    .user-bar-btn-label{display:none;}
+    #settingsBtn{padding:11px 12px;}
 
     /* ações de entrada de estoque viram um grid compacto de ícones,
        igual ao mockup mobile — mesmos botões/IDs, só reestilizados */
@@ -1129,3 +1149,88 @@
     transition:opacity .15s ease;
   }
   .confer-flash.on{opacity:.45;}
+
+  /* CONFIGURAÇÕES DA CONTA (nome do sistema + logo) */
+  .settings-section{
+    padding-bottom:16px;
+    margin-bottom:16px;
+    border-bottom:1px solid var(--line);
+  }
+  .settings-section:last-of-type{border-bottom:none;margin-bottom:6px;}
+  .settings-label{
+    display:block;
+    font-size:11px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+  }
+  .settings-hint{font-size:11.5px;color:var(--ink-soft);margin:0 0 12px;line-height:1.45;}
+  .settings-logo-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .settings-logo-preview{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--ink-soft);
+  }
+  .settings-logo-actions{display:flex;gap:10px;flex-wrap:wrap;flex:1;min-width:0;}
+
+  /* A prévia mostra o que VAI ser salvo, não o que já está salvo — por isso
+     ela ignora a .has-custom-logo do #appScreen e é controlada só pelo JS:
+     com .has-preview mostra a imagem escolhida, sem ela mostra a padrão. */
+  #settingsPanel .brand-mark.has-preview{
+    background-image:var(--preview-logo);
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+    border:none;
+  }
+  #settingsPanel .brand-mark.has-preview::after{display:none;}
+  #appScreen.has-custom-logo #settingsPanel .brand-mark:not(.has-preview){
+    background-image:none;
+    border:3px dashed #505257;
+  }
+  #appScreen.has-custom-logo #settingsPanel .brand-mark:not(.has-preview)::after{display:block;}
+
+  /* RECORTE DA LOGO — o palco é quadrado (o mesmo formato que será salvo) e
+     o círculo claro mostra o pedaço que realmente aparece no cabeçalho. */
+  .settings-crop{
+    display:flex;
+    gap:18px;
+    flex-wrap:wrap;
+    align-items:center;
+    margin-top:16px;
+    padding-top:16px;
+    border-top:1px dashed var(--line);
+  }
+  .settings-crop[hidden]{display:none;}
+  .crop-stage{
+    position:relative;
+    width:220px;
+    max-width:100%;
+    aspect-ratio:1;
+    border-radius:10px;
+    overflow:hidden;
+    background:var(--surface-tint-2);
+    cursor:grab;
+    touch-action:none; /* o arrasto é nosso, não do scroll da página */
+    flex-shrink:0;
+  }
+  .crop-stage.dragging{cursor:grabbing;}
+  .crop-stage canvas{display:block;width:100%;height:100%;}
+  .crop-mask{
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    box-shadow:0 0 0 9999px rgba(20,21,24,.5);
+    border:2px solid rgba(255,255,255,.9);
+    pointer-events:none;
+  }
+  .crop-controls{flex:1;min-width:190px;}
+  .crop-zoom{display:flex;align-items:center;gap:10px;margin-bottom:12px;color:var(--ink-soft);}
+  .crop-zoom input[type="range"]{flex:1;min-width:0;accent-color:var(--accent);}

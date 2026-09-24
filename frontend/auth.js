@@ -24,13 +24,23 @@
     bootLoading.style.display = 'none';
     authScreen.style.display = 'flex';
     appScreen.style.display = 'none';
+    // Deslogou (ou nunca logou): a marca volta pro padrão na hora, pra
+    // próxima conta que entrar neste navegador não herdar a de quem saiu.
+    if(window.Branding) window.Branding.reset();
+    // Sem isso, entrar com OUTRA conta na mesma aba reaproveitava o app já
+    // iniciado: a tela continuava com o estoque e a personalização de quem
+    // saiu até alguém recarregar a página na mão.
+    appStarted = false;
   }
 
-  function showApp(email){
+  function showApp(user){
     bootLoading.style.display = 'none';
     authScreen.style.display = 'none';
     appScreen.style.display = 'block';
-    userEmailEl.textContent = email || '';
+    userEmailEl.textContent = (user && user.email) || '';
+    // Nome e logo são por conta: aplica o que estiver em cache pra ESTE
+    // usuário já na abertura; o app.js confirma depois com a API.
+    if(window.Branding) window.Branding.setUser(user && user.id);
     if(!appStarted){
       appStarted = true;
       // Sessão salva resolve sem rede, às vezes antes do app.js rodar:
@@ -116,7 +126,7 @@
 
   auth.onAuthStateChange((event, session)=>{
     if(session){
-      showApp(session.user.email);
+      showApp(session.user);
     } else {
       showAuth();
     }
@@ -125,7 +135,7 @@
   // Verificação inicial da sessão ao carregar a página.
   auth.getSession().then(({ data })=>{
     if(data.session){
-      showApp(data.session.user.email);
+      showApp(data.session.user);
     } else {
       showAuth();
     }

@@ -13,8 +13,11 @@
   quando entregue via <meta> (só vale via header HTTP) — quem hospedar isso
   precisa setar "Content-Security-Policy: frame-ancestors 'self'" (ou
   X-Frame-Options) no servidor/CDN pra ter proteção contra clickjacking.
+  script-src e connect-src não liberam mais o cdnjs: o pdf.js foi vendorizado
+  em vendor/ e nada mais é carregado de CDN em tempo de execução. O único
+  externo que sobrou é o Google Fonts (style-src/font-src).
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://oytoeuoehoqdkhnhuuyy.supabase.co https://cdnjs.cloudflare.com; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://oytoeuoehoqdkhnhuuyy.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
 <title>Controle de Estoque de Pneus</title>
 
 <!-- PWA -->
@@ -122,7 +125,10 @@
     <div class="brand">
       <div class="brand-mark"></div>
       <div>
-        <h1>Estoque de Pneus</h1>
+        <!-- Texto e logo aqui são personalizáveis por conta (Configurações).
+             O branding.js troca o texto deste h1 e a imagem de .brand-mark;
+             a tela de login acima fica sempre no padrão de propósito. -->
+        <h1 id="brandTitle">Estoque de Pneus</h1>
         <span>Controle por medida e quantidade</span>
       </div>
     </div>
@@ -153,7 +159,13 @@
 
     <div class="user-bar">
       <span><span class="user-bar-prefix">Logado como </span><b id="userEmail"></b></span>
-      <button class="btn btn-ghost" id="logoutBtn">Sair</button>
+      <div class="user-bar-actions">
+        <button class="btn btn-ghost" id="settingsBtn" title="Configurações" aria-label="Configurações">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span class="user-bar-btn-label">Configurações</span>
+        </button>
+        <button class="btn btn-ghost" id="logoutBtn">Sair</button>
+      </div>
     </div>
   </nav>
 
@@ -523,6 +535,78 @@
    </div>
   </div>
 
+  <!-- CONFIGURAÇÕES DA CONTA (pop-out) — nome do sistema e logo. Fica FORA
+       das abas pelo mesmo motivo do modal acima: é aberto pela barra do
+       usuário, que não pertence a nenhuma aba. -->
+  <div class="panel" id="settingsPanel">
+   <div class="modal-card">
+    <div class="form-modal-head">
+      <h2>Configurações</h2>
+      <button type="button" class="modal-close-btn" id="closeSettingsBtn" aria-label="Fechar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <p class="sub">
+      Deixe o sistema com a cara da sua empresa. O nome e a logo valem
+      <b>só para esta conta</b> — quem entrar com outro login continua vendo
+      o padrão ou a personalização dele.
+    </p>
+
+    <div class="settings-section">
+      <div class="field">
+        <label for="setAppName">Nome do sistema</label>
+        <input type="text" id="setAppName" maxlength="40" placeholder="Estoque de Pneus" autocomplete="organization">
+        <small>Aparece no cabeçalho, na aba do navegador e no título dos relatórios exportados. Deixe em branco para usar o padrão.</small>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <span class="settings-label">Logo</span>
+      <p class="settings-hint">
+        Use uma imagem quadrada para o melhor resultado — qualquer outra pode ser
+        recortada abaixo. Ela entra no mesmo círculo da logo atual, no mesmo tamanho.
+      </p>
+
+      <div class="settings-logo-row">
+        <div class="settings-logo-preview">
+          <div class="brand-mark" id="settingsLogoPreview"></div>
+          <span>Prévia</span>
+        </div>
+        <div class="settings-logo-actions">
+          <label for="setLogoInput" class="btn btn-secondary">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Escolher imagem
+          </label>
+          <input type="file" id="setLogoInput" accept="image/png,image/jpeg,image/webp" style="display:none;">
+          <button type="button" class="btn btn-ghost" id="setLogoResetBtn">Usar logo padrão</button>
+        </div>
+      </div>
+
+      <!-- Recorte: arraste pra posicionar, o círculo claro é o que fica. -->
+      <div class="settings-crop" id="settingsCrop" hidden>
+        <div class="crop-stage" id="cropStage">
+          <canvas id="cropCanvas"></canvas>
+          <div class="crop-mask" aria-hidden="true"></div>
+        </div>
+        <div class="crop-controls">
+          <p class="settings-hint">Arraste a imagem pra ajustar. Só o que estiver dentro do círculo aparece na logo.</p>
+          <label class="crop-zoom" for="cropZoom">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>
+            <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom da logo">
+          </label>
+          <button type="button" class="btn btn-ghost" id="cropCancelBtn">Descartar imagem</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="err" id="settingsErr"></div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" id="cancelSettingsBtn">Cancelar</button>
+      <button class="btn btn-primary" id="saveSettingsBtn">Salvar</button>
+    </div>
+   </div>
+  </div>
+
   <!-- ================= ABA: HISTÓRICO ================= -->
   <div class="tab-panel" id="tabHistorico" role="tabpanel" hidden>
     <h2 class="page-title">Histórico</h2>
@@ -608,6 +692,7 @@
 
 <script src="config.js" defer></script>
 <script src="auth-client.js" defer></script>
+<script src="branding.js" defer></script>
 <script src="auth.js" defer></script>
 <script src="zip-writer.js" defer></script>
 <script src="xlsx-writer.js" defer></script>

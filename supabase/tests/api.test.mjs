@@ -46,7 +46,7 @@ test('preflight CORS: origem liberada recebe headers, outra não', async () => {
   assert.match(ok.headers.get('Access-Control-Allow-Methods'), /PUT/);
   assert.match(ok.headers.get('Access-Control-Allow-Headers'), /Authorization/);
 
-  const bad = await handleRequest(new Request('https://x/api/tires', { method: 'OPTIONS', headers: { Origin: 'https://malicioso.com' } }));
+  const bad = await handleRequest(new Request('https://x/api/tires', { method: 'OPTIONS', headers: { Origin: 'https://exemplo.invalid' } }));
   assert.equal(bad.status, 204);
   assert.equal(bad.headers.get('Access-Control-Allow-Origin'), null);
   assert.equal(fake.calls.length, 0, 'preflight não pode bater no Supabase');
@@ -196,6 +196,62 @@ test('histórico: ordem desc, filtro por pneu e por período', async () => {
 test('respostas normais levam header CORS pra origem liberada', async () => {
   const r = await call('GET', '/api/tires');
   assert.equal(r.headers.get('Access-Control-Allow-Origin'), ORIGIN);
-  const other = await call('GET', '/api/tires', { origin: 'https://malicioso.com' });
+  const other = await call('GET', '/api/tires', { origin: 'https://exemplo.invalid' });
   assert.equal(other.headers.get('Access-Control-Allow-Origin'), null);
+});
+
+/* ---------------------------------------------------------------------------
+   Personalização por conta (nome do sistema e logo)
+--------------------------------------------------------------------------- */
+
+const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+test('settings: conta sem personalização devolve os dois campos nulos', async () => {
+  const r = await call('GET', '/api/settings');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json, { appName: null, logo: null });
+  assert.equal(fake.rows.user_settings.length, 0, 'GET não deve criar linha');
+});
+
+test('settings: salva nome e logo, e o segundo PUT substitui a mesma linha', async () => {
+  const salvo = await call('PUT', '/api/settings', { body: { appName: 'Pneus do Arthur', logo: LOGO } });
+  assert.equal(salvo.status, 200);
+  assert.deepEqual(salvo.json, { appName: 'Pneus do Arthur', logo: LOGO });
+
+  assert.deepEqual((await call('GET', '/api/settings')).json, { appName: 'Pneus do Arthur', logo: LOGO });
+
+  const trocado = await call('PUT', '/api/settings', { body: { appName: 'Borracharia Central', logo: LOGO } });
+  assert.equal(trocado.json.appName, 'Borracharia Central');
+  assert.equal(fake.rows.user_settings.length, 1, 'upsert não pode duplicar a linha da conta');
+});
+
+test('settings: PUT sem os campos volta tudo pro padrão', async () => {
+  await call('PUT', '/api/settings', { body: { appName: 'Pneus do Arthur', logo: LOGO } });
+
+  const limpo = await call('PUT', '/api/settings', { body: {} });
+  assert.equal(limpo.status, 200);
+  assert.deepEqual(limpo.json, { appName: null, logo: null });
+  assert.deepEqual((await call('GET', '/api/settings')).json, { appName: null, logo: null });
+});
+
+test('settings: nome é normalizado; nome longo, logo inválida e logo gigante → 400', async () => {
+  const limpo = await call('PUT', '/api/settings', { body: { appName: '  Pneus   do\u0007 Arthur  ' } });
+  assert.equal(limpo.json.appName, 'Pneus do Arthur', 'espaços repetidos e caracteres de controle saem');
+
+  assert.equal((await call('PUT', '/api/settings', { body: { appName: 'x'.repeat(41) } })).status, 400);
+  assert.equal((await call('PUT', '/api/settings', { body: { logo: 'https://exemplo.invalid/logo.png' } })).status, 400);
+  assert.equal((await call('PUT', '/api/settings', { body: { logo: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' } })).status, 400);
+  assert.equal((await call('PUT', '/api/settings', { body: { logo: `data:image/png;base64,${'A'.repeat(300001)}` } })).status, 400);
+
+  assert.equal(fake.rows.user_settings[0].app_name, 'Pneus do Arthur', 'nenhuma recusa pode ter gravado');
+  assert.equal(fake.rows.user_settings[0].logo_data_url, null);
+});
+
+test('settings: cada conta enxerga só a própria personalização', async () => {
+  await call('PUT', '/api/settings', { token: 'token-a', body: { appName: 'Loja A', logo: LOGO } });
+  await call('PUT', '/api/settings', { token: 'token-b', body: { appName: 'Loja B' } });
+
+  assert.deepEqual((await call('GET', '/api/settings', { token: 'token-a' })).json, { appName: 'Loja A', logo: LOGO });
+  assert.deepEqual((await call('GET', '/api/settings', { token: 'token-b' })).json, { appName: 'Loja B', logo: null });
+  assert.equal(fake.rows.user_settings.length, 2, 'uma linha por conta');
 });

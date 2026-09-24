@@ -6,7 +6,7 @@
 // IMPORTANTE: mude esse número toda vez que publicar uma nova versão do
 // frontend, senão os usuários que já instalaram o app podem continuar vendo
 // a versão antiga em cache por um tempo.
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v12';
 const CACHE_NAME = `estoque-pneus-${CACHE_VERSION}`;
 
 const APP_SHELL = [
@@ -16,6 +16,7 @@ const APP_SHELL = [
   './auth.css',
   './app.js',
   './auth-client.js',
+  './branding.js',
   './auth.js',
   './config.js',
   './sw-register.js',

@@ -52,9 +52,12 @@ async function installCommonMocks(page, {
   writeLatencyMs = 0,   // atraso pra TODAS as chamadas (simula API/backend lento em geral)
   mutationLatencyMs = 0, // atraso só pra POST/PUT/DELETE (isola a latência só das escritas)
   apiFail = false,
+  settings = { appName: null, logo: null }, // personalização da conta (ver /api/settings)
   onRequest,
 } = {}) {
-  const state = { tires, history: [] };
+  // `unmocked` acumula chamadas que nenhum handler daqui atendeu — um teste
+  // pode afirmar que ficou vazio (ver smoke.spec.js).
+  const state = { tires, history: [], settings: { ...settings }, unmocked: [] };
 
   // Auth (GoTrue): nenhum teste pode bater no Supabase de verdade. Sem sessão
   // salva o auth-client nem chama a rede; specs de login sobrescrevem isso.
@@ -134,14 +137,67 @@ async function installCommonMocks(page, {
       return route.fulfill({ status: 204, body: '' });
     }
 
-    return route.continue();
+    // Chegou aqui = alguém criou uma rota nova em /api/tires/... e não
+    // simulou ela aqui. Antes isso caía num `route.continue()`, que mandava
+    // a requisição pra API de VERDADE (Supabase de produção) em silêncio.
+    // Agora aborta e registra: teste nunca deve tocar em serviço real, e a
+    // falha precisa apontar o que faltou simular.
+    console.error(
+      `[mock-app] chamada não simulada: ${method} ${url.pathname} — ` +
+      'adicione um handler em frontend/tests/helpers/mock-app.js'
+    );
+    state.unmocked.push(`${method} ${url.pathname}`);
+    return route.abort('blockedbyclient');
   });
 
   await page.route('**/api/history**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state.history) })
   );
 
+  // Personalização da conta (nome do sistema e logo). Precisa estar mockada
+  // mesmo nos testes que não mexem nisso: o app pede /api/settings em todo
+  // boot, e sem handler a requisição sairia pra API de verdade.
+  await page.route('**/api/settings**', async (route) => {
+    const req = route.request();
+    if (onRequest) onRequest(req.method(), req.url());
+    if (apiFail) return route.abort('connectionrefused');
+    if (writeLatencyMs) await new Promise((r) => setTimeout(r, writeLatencyMs));
+    if (req.method() === 'PUT') {
+      const body = req.postDataJSON();
+      state.settings = { appName: body.appName || null, logo: body.logo || null };
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(state.settings),
+    });
+  });
+
   return state;
+}
+
+/**
+ * Rede fechada: bloqueia e registra QUALQUER requisição que escaparia pra
+ * fora do servidor de teste. Devolve o array de fugas (vazio = isolado).
+ *
+ * Precisa ser chamado ANTES de `installCommonMocks`: o Playwright resolve
+ * rotas na ordem inversa do registro, então registrar primeiro deixa este
+ * handler com a MENOR prioridade — ele só recebe o que nenhum mock atendeu.
+ * É essa a diferença entre "o app tentou" e "de fato ia sair da máquina":
+ * as chamadas pro Supabase, por exemplo, são interceptadas pelos mocks e
+ * nunca chegam aqui.
+ */
+async function blockExternalRequests(page) {
+  const fugas = [];
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (/^http:\/\/localhost:\d+\//.test(url) || /^(data|blob|about):/.test(url)) {
+      return route.continue();
+    }
+    fugas.push(url);
+    return route.abort('blockedbyclient');
+  });
+  return fugas;
 }
 
 /** Pula a tela de login (auth.js real nunca chega a autenticar contra um
@@ -183,4 +239,11 @@ async function disableServiceWorker(page) {
   });
 }
 
-module.exports = { buildFakeTires, installCommonMocks, bootIntoApp, waitForContentReady, disableServiceWorker };
+module.exports = {
+  buildFakeTires,
+  installCommonMocks,
+  bootIntoApp,
+  waitForContentReady,
+  disableServiceWorker,
+  blockExternalRequests,
+};

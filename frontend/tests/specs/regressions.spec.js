@@ -38,32 +38,34 @@ test.describe('Regressão — exportação sem CDN externo', () => {
   });
 });
 
-test.describe('Regressão — biblioteca externa que falha ao carregar', () => {
+test.describe('Regressão — biblioteca que falha ao carregar', () => {
   // Bug: loadScriptOnce() guardava a Promise rejeitada em cache pra sempre
   // depois de UMA falha — qualquer tentativa seguinte falhava na hora, sem
   // nunca tentar a rede de novo (usuário via o erro pra sempre na mesma
   // sessão, mesmo depois de resolver a rede real). Corrigido limpando o
   // cache em caso de falha.
   //
-  // Simulamos a falha bloqueando o CDN de verdade (cdnjs, pdf.js) via
-  // `page.route()` — determinístico, sem depender de um domínio externo
-  // realmente estar fora do ar. Desligamos o Service Worker porque ele
-  // cacheia a casca do app (ver sw.js) e poderia interferir na simulação.
+  // Simulamos a falha bloqueando o arquivo do pdf.js via `page.route()` —
+  // determinístico, sem depender de nada estar fora do ar. Desligamos o
+  // Service Worker porque ele cacheia a casca do app (ver sw.js) e poderia
+  // interferir na simulação.
   //
   // Alvo: LEITURA de PDF (import de relatório), via ensurePdfJs() ->
-  // loadScriptOnce(PDFJS_CDN). Não é mais a exportação em PDF — desde que
-  // ela passou a ser gerada por pdf-writer.js + pdf-table.js (sem terceiro,
-  // sem loadScriptOnce), a exportação não carrega mais nenhum script
-  // externo. A leitura de PDF (pdf.js, só usada no import/sincronização)
-  // continua vindo de CDN com SRI, então é ela que ainda exercita o bug
-  // original de loadScriptOnce().
+  // loadScriptOnce(PDFJS_SRC). Não é a exportação em PDF — desde que ela
+  // passou a ser gerada por pdf-writer.js + pdf-table.js (sem terceiro, sem
+  // loadScriptOnce), a exportação não carrega script nenhum.
+  //
+  // O alvo bloqueado é `vendor/pdf.min.js`, servido pela própria origem: o
+  // pdf.js foi vendorizado e não vem mais de CDN. Antes disso este teste
+  // liberava o cdnjs de verdade na 2ª tentativa (route.continue()) e era o
+  // único ponto da suíte que saía pra internet — hoje nenhum teste sai.
   test('depois de uma falha ao carregar, uma nova tentativa tenta de novo (não fica presa em cache)', async ({ page }) => {
     await disableServiceWorker(page);
     await installCommonMocks(page, { tires: buildFakeTires(2) });
 
     let blockPdfJs = true;
     let hits = 0;
-    await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/**', (route) => {
+    await page.route('**/vendor/pdf.min.js', (route) => {
       hits++;
       if (blockPdfJs) return route.abort('connectionrefused');
       return route.continue();
@@ -91,20 +93,20 @@ test.describe('Regressão — biblioteca externa que falha ao carregar', () => {
       mimeType: 'application/pdf',
       buffer: Buffer.from(pdfBytes),
     });
-    await expect(page.locator('#importStatus')).toContainText('biblioteca externa', { timeout: 15000 });
+    await expect(page.locator('#importStatus')).toContainText('leitor de PDF', { timeout: 15000 });
     expect(hits, 'deveria ter tentado buscar o pdf.js pelo menos uma vez').toBeGreaterThan(0);
     const hitsAfterFirstTry = hits;
 
-    // "conserta a rede" e tenta importar de novo — se o bug estivesse de
-    // volta, isso falharia na hora com o mesmo erro em cache, SEM gerar
-    // uma requisição nova pro arquivo.
+    // "conserta" o carregamento e tenta importar de novo — se o bug
+    // estivesse de volta, isso falharia na hora com o mesmo erro em cache,
+    // SEM gerar uma requisição nova pro arquivo.
     blockPdfJs = false;
     await page.setInputFiles('#importFileInput', {
       name: 'relatorio.pdf',
       mimeType: 'application/pdf',
       buffer: Buffer.from(pdfBytes),
     });
-    await expect(page.locator('#importStatus')).not.toContainText('biblioteca externa', { timeout: 15000 });
+    await expect(page.locator('#importStatus')).not.toContainText('leitor de PDF', { timeout: 15000 });
     expect(hits, 'a 2ª tentativa deveria ter buscado o pdf.js de novo, não reusado o erro em cache').toBeGreaterThan(hitsAfterFirstTry);
   });
 });

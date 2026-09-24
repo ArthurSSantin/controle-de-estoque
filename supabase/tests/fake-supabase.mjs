@@ -24,6 +24,14 @@ const TABLES = {
   tire_history: {
     defaults: () => ({ tire_id: null, campo: null, valor_anterior: null, valor_novo: null }),
   },
+  // Personalização por conta: uma linha por usuário, sem id próprio nem
+  // created_at — a chave primária é o owner_id, e o PUT /api/settings grava
+  // por upsert (Prefer: resolution=merge-duplicates) em cima dela.
+  user_settings: {
+    defaults: () => ({ app_name: null, logo_data_url: null }),
+    primaryKey: 'owner_id',
+    generatedId: false,
+  },
 };
 
 const ALLOWED_PARAMS = new Set(['select', 'order', 'limit', 'offset']);
@@ -38,7 +46,7 @@ function pgError(status, code, message) {
 
 export function createFakeSupabase({ url, anonKey, users }) {
   // users: { [token]: { id, email } }
-  const rows = { tires: [], tire_history: [] };
+  const rows = { tires: [], tire_history: [], user_settings: [] };
   const calls = [];
   let clock = Date.parse('2026-09-01T12:00:00Z');
   const state = { authDown: false };
@@ -110,7 +118,11 @@ export function createFakeSupabase({ url, anonKey, users }) {
 
   function preferOf(req) {
     const p = (req.headers.get('Prefer') || '').split(',').map((s) => s.trim()).filter(Boolean);
-    return { representation: p.includes('return=representation'), count: p.includes('count=exact') };
+    return {
+      representation: p.includes('return=representation'),
+      count: p.includes('count=exact'),
+      merge: p.includes('resolution=merge-duplicates'),
+    };
   }
 
   async function handleRest(req, u) {
@@ -150,19 +162,41 @@ export function createFakeSupabase({ url, anonKey, users }) {
       if (req.headers.get('Content-Type') !== 'application/json') return pgError(415, 'PGRST102', 'Content-Type');
       const body = JSON.parse(await req.text());
       const items = Array.isArray(body) ? body : [body];
+      const spec = TABLES[table];
       const created = [];
+      const replaced = [];
       for (const item of items) {
         if (item.owner_id !== ownerId) {
           return pgError(403, '42501', `new row violates row-level security policy for table "${table}"`);
         }
-        const row = { ...TABLES[table].defaults(), ...item, id: randomUUID(), created_at: nextTimestamp() };
+        const row = { ...spec.defaults(), ...item };
+        if (spec.generatedId !== false) {
+          row.id = randomUUID();
+          row.created_at = nextTimestamp();
+        }
+        // Chave primária já ocupada: com Prefer: resolution=merge-duplicates
+        // o PostgREST substitui a linha (upsert); sem ele, é conflito.
+        if (spec.primaryKey && rows[table].some((r) => r[spec.primaryKey] === row[spec.primaryKey])) {
+          if (!prefer.merge) {
+            return pgError(409, '23505', `duplicate key value violates unique constraint "${table}_pkey"`);
+          }
+          replaced.push(row);
+          created.push(row);
+          continue;
+        }
         const dup = checkUnique(table, row, null) || (created.some((c) => c.codigo_barras && c.codigo_barras === row.codigo_barras)
           ? pgError(409, '23505', 'duplicate key value violates unique constraint "idx_tires_owner_codigo_barras"')
           : null);
         if (dup) return dup;
         created.push(row);
       }
-      rows[table].push(...created);
+      // Só comita depois de validar a leva inteira — o PostgREST insere em
+      // lote dentro de uma transação, tudo ou nada.
+      for (const row of replaced) {
+        const idx = rows[table].findIndex((r) => r[spec.primaryKey] === row[spec.primaryKey]);
+        rows[table][idx] = row;
+      }
+      rows[table].push(...created.filter((r) => !replaced.includes(r)));
       return prefer.representation
         ? new Response(JSON.stringify(created), { status: 201, headers: { 'Content-Type': 'application/json' } })
         : new Response(null, { status: 201 });
