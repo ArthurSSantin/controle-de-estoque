@@ -263,7 +263,8 @@ function dbErrorResponse(error: DbError) {
     return json({ error: 'Esse código de barras já está cadastrado em outro item do estoque.' }, 409);
   }
   // tabela inexistente: faltou rodar uma migration de database/ no Supabase
-  if (error.code === 'PGRST205' || error.code === '42P01') {
+  // (ou coluna inexistente: faltou a migration de uma coluna nova)
+  if (error.code === 'PGRST205' || error.code === '42P01' || error.code === 'PGRST204' || error.code === '42703') {
     return json({ error: 'Banco de dados desatualizado: rode as migrations de database/ no SQL Editor do Supabase.' }, 503);
   }
   return json({ error: 'Não foi possível completar a operação. Tente novamente.' }, 500);
@@ -521,12 +522,15 @@ const MAX_APP_NAME_LEN = 40;
 // A logo chega como data URL base64, já recortada em 256x256 pelo frontend.
 // O teto vale mesmo se alguém chamar a API direto, sem passar pela tela.
 const MAX_LOGO_CHARS = 300_000;
+// Cor de destaque do sistema: só #RRGGBB — vira variável de CSS no frontend.
+const ACCENT_COLOR_REGEX = /^#[0-9a-f]{6}$/i;
 const LOGO_DATA_URL_REGEX = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
 
 function settingsToApi(row: any) {
   return {
     appName: row?.app_name || null,
     logo: row?.logo_data_url || null,
+    accentColor: row?.accent_color || null,
   };
 }
 
@@ -559,6 +563,15 @@ route('PUT', '/settings', async ({ req, token, userId }) => {
     }
   }
 
+  let accentColor: string | null = null;
+  if (body?.accentColor !== undefined && body?.accentColor !== null && body.accentColor !== '') {
+    accentColor = String(body.accentColor).trim();
+    if (!ACCENT_COLOR_REGEX.test(accentColor)) {
+      return json({ error: 'Cor inválida. Use o formato #RRGGBB.' }, 400);
+    }
+    accentColor = accentColor.toLowerCase();
+  }
+
   let logo: string | null = null;
   if (body?.logo !== undefined && body?.logo !== null && body.logo !== '') {
     logo = String(body.logo);
@@ -577,6 +590,7 @@ route('PUT', '/settings', async ({ req, token, userId }) => {
       owner_id: userId,
       app_name: appName,
       logo_data_url: logo,
+      accent_color: accentColor,
       updated_at: new Date().toISOString(),
     },
     prefer: 'resolution=merge-duplicates,return=representation',

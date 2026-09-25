@@ -133,8 +133,10 @@
    * @param {string[][]} opts.rows - linhas do corpo, cada uma um array na
    *   mesma ordem de `columns` (já formatadas como string)
    * @param {number} [opts.fontSize=8]
+   * @param {number[]} [opts.headerFill] - [r,g,b] do cabeçalho (cor do sistema da conta)
+   * @param {number[]} [opts.headerText] - [r,g,b] do texto do cabeçalho
    */
-  function renderReport(doc, { title, subtitle, columns, rows, fontSize = 8 }) {
+  function renderReport(doc, { title, subtitle, columns, rows, fontSize = 8, headerFill = HEADER_FILL, headerText = HEADER_TEXT }) {
     doc.setFont('helvetica');
     doc.setTextColor(...TITLE_TEXT);
     doc.setFontSize(14);
@@ -164,7 +166,7 @@
     }
 
     function drawHeader(y) {
-      drawRow(y, columns, { fill: HEADER_FILL, textColor: HEADER_TEXT, bold: true });
+      drawRow(y, columns, { fill: headerFill, textColor: headerText, bold: true });
       return y + rowHeight;
     }
 

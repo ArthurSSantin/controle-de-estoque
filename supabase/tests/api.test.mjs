@@ -209,16 +209,16 @@ const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ
 test('settings: conta sem personalização devolve os dois campos nulos', async () => {
   const r = await call('GET', '/api/settings');
   assert.equal(r.status, 200);
-  assert.deepEqual(r.json, { appName: null, logo: null });
+  assert.deepEqual(r.json, { appName: null, logo: null, accentColor: null });
   assert.equal(fake.rows.user_settings.length, 0, 'GET não deve criar linha');
 });
 
 test('settings: salva nome e logo, e o segundo PUT substitui a mesma linha', async () => {
   const salvo = await call('PUT', '/api/settings', { body: { appName: 'Pneus do Arthur', logo: LOGO } });
   assert.equal(salvo.status, 200);
-  assert.deepEqual(salvo.json, { appName: 'Pneus do Arthur', logo: LOGO });
+  assert.deepEqual(salvo.json, { appName: 'Pneus do Arthur', logo: LOGO, accentColor: null });
 
-  assert.deepEqual((await call('GET', '/api/settings')).json, { appName: 'Pneus do Arthur', logo: LOGO });
+  assert.deepEqual((await call('GET', '/api/settings')).json, { appName: 'Pneus do Arthur', logo: LOGO, accentColor: null });
 
   const trocado = await call('PUT', '/api/settings', { body: { appName: 'Borracharia Central', logo: LOGO } });
   assert.equal(trocado.json.appName, 'Borracharia Central');
@@ -230,8 +230,8 @@ test('settings: PUT sem os campos volta tudo pro padrão', async () => {
 
   const limpo = await call('PUT', '/api/settings', { body: {} });
   assert.equal(limpo.status, 200);
-  assert.deepEqual(limpo.json, { appName: null, logo: null });
-  assert.deepEqual((await call('GET', '/api/settings')).json, { appName: null, logo: null });
+  assert.deepEqual(limpo.json, { appName: null, logo: null, accentColor: null });
+  assert.deepEqual((await call('GET', '/api/settings')).json, { appName: null, logo: null, accentColor: null });
 });
 
 test('settings: nome é normalizado; nome longo, logo inválida e logo gigante → 400', async () => {
@@ -249,10 +249,10 @@ test('settings: nome é normalizado; nome longo, logo inválida e logo gigante �
 
 test('settings: cada conta enxerga só a própria personalização', async () => {
   await call('PUT', '/api/settings', { token: 'token-a', body: { appName: 'Loja A', logo: LOGO } });
-  await call('PUT', '/api/settings', { token: 'token-b', body: { appName: 'Loja B' } });
+  await call('PUT', '/api/settings', { token: 'token-b', body: { appName: 'Loja B', accentColor: '#2f9e44' } });
 
-  assert.deepEqual((await call('GET', '/api/settings', { token: 'token-a' })).json, { appName: 'Loja A', logo: LOGO });
-  assert.deepEqual((await call('GET', '/api/settings', { token: 'token-b' })).json, { appName: 'Loja B', logo: null });
+  assert.deepEqual((await call('GET', '/api/settings', { token: 'token-a' })).json, { appName: 'Loja A', logo: LOGO, accentColor: null });
+  assert.deepEqual((await call('GET', '/api/settings', { token: 'token-b' })).json, { appName: 'Loja B', logo: null, accentColor: '#2f9e44' });
   assert.equal(fake.rows.user_settings.length, 2, 'uma linha por conta');
 });
 
@@ -266,6 +266,37 @@ test('settings: tabela ainda não criada (migration não rodada) avisa em vez de
   };
   try {
     const r = await call('PUT', '/api/settings', { body: { appName: 'X' } });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /migrations/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('settings: cor do sistema é salva em minúsculas; formato inválido → 400', async () => {
+  const salvo = await call('PUT', '/api/settings', { body: { accentColor: '#1C6DD0' } });
+  assert.equal(salvo.status, 200);
+  assert.equal(salvo.json.accentColor, '#1c6dd0');
+  assert.equal(fake.rows.user_settings[0].accent_color, '#1c6dd0');
+  assert.equal((await call('GET', '/api/settings')).json.accentColor, '#1c6dd0');
+
+  for (const ruim of ['red', '#12345', '#1234567', 'url(x)', '#12345g', '#fff;x']) {
+    assert.equal((await call('PUT', '/api/settings', { body: { accentColor: ruim } })).status, 400, ruim);
+  }
+  // sem o campo = volta pro padrão
+  assert.equal((await call('PUT', '/api/settings', { body: { appName: 'X' } })).json.accentColor, null);
+});
+
+test('settings: coluna de cor ainda não criada (migration não rodada) avisa pra rodar as migrations', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if (String(input.url || input).includes('/rest/v1/user_settings') && (init?.method || input.method) === 'POST') {
+      return new Response(JSON.stringify({ code: 'PGRST204', message: "Could not find the 'accent_color' column of 'user_settings' in the schema cache" }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(input, init);
+  };
+  try {
+    const r = await call('PUT', '/api/settings', { body: { accentColor: '#1c6dd0' } });
     assert.equal(r.status, 503);
     assert.match(r.json.error, /migrations/);
   } finally {

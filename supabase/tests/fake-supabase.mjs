@@ -28,7 +28,7 @@ const TABLES = {
   // created_at — a chave primária é o owner_id, e o PUT /api/settings grava
   // por upsert (Prefer: resolution=merge-duplicates) em cima dela.
   user_settings: {
-    defaults: () => ({ app_name: null, logo_data_url: null }),
+    defaults: () => ({ app_name: null, logo_data_url: null, accent_color: null }),
     primaryKey: 'owner_id',
     generatedId: false,
   },
