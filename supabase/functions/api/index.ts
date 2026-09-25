@@ -262,6 +262,10 @@ function dbErrorResponse(error: DbError) {
   if (error.code === '23505' && /codigo_barras/.test(error.message || '')) {
     return json({ error: 'Esse código de barras já está cadastrado em outro item do estoque.' }, 409);
   }
+  // tabela inexistente: faltou rodar uma migration de database/ no Supabase
+  if (error.code === 'PGRST205' || error.code === '42P01') {
+    return json({ error: 'Banco de dados desatualizado: rode as migrations de database/ no SQL Editor do Supabase.' }, 503);
+  }
   return json({ error: 'Não foi possível completar a operação. Tente novamente.' }, 500);
 }
 

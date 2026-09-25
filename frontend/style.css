@@ -245,6 +245,7 @@
       background:var(--rubber);
       padding:28px 20px;
       overflow-y:auto;
+      overflow-x:hidden;
       gap:0;
       margin-bottom:0;
       z-index:10;
@@ -283,7 +284,11 @@
       border-top:1px solid #36383D;
     }
     .app-sidebar .user-bar span{color:#B5B7BC;font-size:12.5px;}
-    .app-sidebar .user-bar b{color:#DCDDE0;}
+    .app-sidebar .user-bar b{color:#DCDDE0;overflow-wrap:anywhere;}
+    /* 200px úteis: botões um embaixo do outro, largura cheia — lado a lado
+       estouravam a sidebar e criavam barra de rolagem horizontal */
+    .app-sidebar .user-bar-actions{flex-direction:column;align-items:stretch;width:100%;}
+    .app-sidebar .user-bar-actions .btn{width:100%;justify-content:center;}
     .app-sidebar .user-bar .btn-ghost{border-color:#45474C;color:#B5B7BC;background:transparent;}
     .app-sidebar .user-bar .btn-ghost:hover{border-color:#616369;color:var(--surface);}
 

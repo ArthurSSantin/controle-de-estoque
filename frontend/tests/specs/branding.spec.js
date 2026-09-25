@@ -67,6 +67,44 @@ test('salvar o nome troca cabeçalho, título da aba e o que vai pra API', async
   expect(state.settings.appName).toBe('Pneus do Arthur');
 });
 
+test('API publicada sem /api/settings (404) explica o que fazer em vez de "rota não encontrada"', async ({ page }) => {
+  await installCommonMocks(page, { tires: buildFakeTires(2) });
+  // Edge Function antiga: não conhece a rota e responde o 404 genérico dela
+  await page.route('**/api/settings**', (route) =>
+    route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'rota não encontrada' }) })
+  );
+  await bootIntoApp(page);
+  await waitForContentReady(page);
+
+  await page.click('#settingsBtn');
+  await page.fill('#setAppName', 'teste');
+  await page.click('#saveSettingsBtn');
+
+  await expect(page.locator('#settingsErr')).toContainText('Servidor desatualizado');
+  await expect(page.locator('#settingsPanel')).toBeVisible();
+  await expect(page.locator('#brandTitle')).toHaveText('Estoque de Pneus');
+});
+
+test('desktop: botões Configurações/Sair cabem na barra lateral (sem rolagem horizontal)', async ({ page }, testInfo) => {
+  test.skip((page.viewportSize() || {}).width < 901, 'barra lateral só existe no desktop');
+  await installCommonMocks(page, { tires: buildFakeTires(2) });
+  await bootIntoApp(page);
+  await waitForContentReady(page);
+  await page.evaluate(() => { document.getElementById('userEmail').textContent = 'arthursantin123@gmail.com'; });
+
+  const m = await page.evaluate(() => {
+    const side = document.querySelector('.app-sidebar').getBoundingClientRect();
+    const sideEl = document.querySelector('.app-sidebar');
+    const btns = ['#settingsBtn', '#logoutBtn'].map((sel) => document.querySelector(sel).getBoundingClientRect());
+    return {
+      overflow: sideEl.scrollWidth - sideEl.clientWidth,
+      inside: btns.every((b) => b.left >= side.left && b.right <= side.right),
+    };
+  });
+  expect(m.overflow).toBeLessThanOrEqual(0);
+  expect(m.inside).toBe(true);
+});
+
 test('nome em branco volta pro padrão', async ({ page }) => {
   await installCommonMocks(page, { tires: buildFakeTires(1), settings: { appName: 'Loja Antiga', logo: null } });
   const puts = watchSettingsPuts(page);
