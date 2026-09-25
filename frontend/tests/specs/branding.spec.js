@@ -155,6 +155,9 @@ test('a logo escolhida vira um quadrado de 256x256 e entra no lugar da padrão',
   expect(marca.bg).toContain('data:image/');
   // Mesmo tamanho da logo padrão — 42px no cabeçalho empilhado, 38px na sidebar.
   expect([38, 42]).toContain(Math.round(marca.w));
+
+  // e o ícone da aba do navegador também vira a logo
+  await expect(page.locator('#favicon')).toHaveAttribute('href', logo);
 });
 
 test('"Usar logo padrão" tira a logo da conta', async ({ page }) => {
@@ -162,12 +165,14 @@ test('"Usar logo padrão" tira a logo da conta', async ({ page }) => {
   const puts = watchSettingsPuts(page);
   await bootIntoApp(page);
   await expect(page.locator('#appScreen')).toHaveClass(/has-custom-logo/);
+  await expect(page.locator('#favicon')).toHaveAttribute('href', TINY_PNG);
 
   await page.click('#settingsBtn');
   await page.click('#setLogoResetBtn');
   await page.click('#saveSettingsBtn');
 
   await expect(page.locator('#appScreen')).not.toHaveClass(/has-custom-logo/);
+  await expect(page.locator('#favicon')).toHaveAttribute('href', 'icons/icon-192.png');
   expect(puts[0].logo).toBe(null);
   expect(puts[0].appName).toBe('Loja A');
 });
