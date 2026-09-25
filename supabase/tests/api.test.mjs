@@ -255,3 +255,20 @@ test('settings: cada conta enxerga só a própria personalização', async () =>
   assert.deepEqual((await call('GET', '/api/settings', { token: 'token-b' })).json, { appName: 'Loja B', logo: null });
   assert.equal(fake.rows.user_settings.length, 2, 'uma linha por conta');
 });
+
+test('settings: tabela ainda não criada (migration não rodada) avisa em vez de "erro interno"', async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if (String(input.url || input).includes('/rest/v1/user_settings')) {
+      return new Response(JSON.stringify({ code: 'PGRST205', message: "Could not find the table 'public.user_settings' in the schema cache" }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(input, init);
+  };
+  try {
+    const r = await call('PUT', '/api/settings', { body: { appName: 'X' } });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /migrations/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

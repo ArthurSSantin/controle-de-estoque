@@ -82,6 +82,8 @@
         headers: await authHeaders(),
         body: JSON.stringify(value),
       });
+      // 404 aqui = a Edge Function publicada é anterior a /api/settings
+      if (res.status === 404) throw new Error('Servidor desatualizado: publique a versão nova da API (npx supabase functions deploy api).');
       if (!res.ok) throw new Error((await safeErr(res)) || 'Falha ao salvar as configurações');
       return res.json();
     },
