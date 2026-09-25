@@ -43,6 +43,14 @@
     if (titleEl) titleEl.textContent = current.appName || DEFAULT_APP_NAME;
     document.title = current.appName || DEFAULT_PAGE_TITLE;
 
+    // ícone da aba do navegador acompanha a logo da conta
+    const favicon = document.getElementById('favicon');
+    if (favicon) {
+      if (!favicon.dataset.defaultHref) favicon.dataset.defaultHref = favicon.getAttribute('href');
+      favicon.setAttribute('href', current.logo || favicon.dataset.defaultHref);
+      favicon.setAttribute('type', current.logo ? current.logo.slice(5, current.logo.indexOf(';')) : 'image/png');
+    }
+
     // A logo entra como custom property no #appScreen em vez de ser aplicada
     // elemento a elemento: assim qualquer .brand-mark que o render criar
     // depois (estado vazio, figurinha do scanner) já nasce com ela.
