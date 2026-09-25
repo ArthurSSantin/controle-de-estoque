@@ -547,10 +547,12 @@
       </button>
     </div>
     <p class="sub">
-      Deixe o sistema com a cara da sua empresa. O nome e a logo valem
+      Deixe o sistema com a cara da sua empresa. O nome, a logo e a cor valem
       <b>só para esta conta</b> — quem entrar com outro login continua vendo
       o padrão ou a personalização dele.
     </p>
+
+    <h3 class="settings-group">Identidade da empresa</h3>
 
     <div class="settings-section">
       <div class="field">
@@ -597,6 +599,21 @@
           <button type="button" class="btn btn-ghost" id="cropCancelBtn">Descartar imagem</button>
         </div>
       </div>
+    </div>
+
+    <h3 class="settings-group">Personalização do sistema</h3>
+
+    <div class="settings-section">
+      <span class="settings-label" id="accentLabel">Cor do sistema</span>
+      <p class="settings-hint">
+        Cor de destaque de botões, abas, filtros e do cabeçalho dos relatórios
+        em PDF. A prévia aparece na hora — só vale depois de salvar.
+      </p>
+      <div class="accent-swatches" id="accentSwatches" role="radiogroup" aria-labelledby="accentLabel"></div>
+      <label class="accent-custom" for="setAccentCustom">
+        <input type="color" id="setAccentCustom" value="#d71920">
+        <span>Outra cor <small id="accentCustomHex"></small></span>
+      </label>
     </div>
 
     <div class="err" id="settingsErr"></div>

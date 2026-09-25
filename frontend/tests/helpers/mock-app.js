@@ -52,7 +52,7 @@ async function installCommonMocks(page, {
   writeLatencyMs = 0,   // atraso pra TODAS as chamadas (simula API/backend lento em geral)
   mutationLatencyMs = 0, // atraso só pra POST/PUT/DELETE (isola a latência só das escritas)
   apiFail = false,
-  settings = { appName: null, logo: null }, // personalização da conta (ver /api/settings)
+  settings = { appName: null, logo: null, accentColor: null }, // personalização da conta (ver /api/settings)
   onRequest,
 } = {}) {
   // `unmocked` acumula chamadas que nenhum handler daqui atendeu — um teste
@@ -164,7 +164,7 @@ async function installCommonMocks(page, {
     if (writeLatencyMs) await new Promise((r) => setTimeout(r, writeLatencyMs));
     if (req.method() === 'PUT') {
       const body = req.postDataJSON();
-      state.settings = { appName: body.appName || null, logo: body.logo || null };
+      state.settings = { appName: body.appName || null, logo: body.logo || null, accentColor: body.accentColor || null };
     }
     return route.fulfill({
       status: 200,

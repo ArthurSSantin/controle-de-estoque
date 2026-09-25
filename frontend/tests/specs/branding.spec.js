@@ -31,6 +31,13 @@ function watchSettingsPuts(page) {
   return puts;
 }
 
+const DEFAULT_ACCENT = '#d71920';
+
+/** Cor de destaque efetiva dentro do app (o que os botões usam). */
+function accent(page) {
+  return page.evaluate(() => getComputedStyle(document.getElementById('appScreen')).getPropertyValue('--accent').trim().toLowerCase());
+}
+
 test.beforeEach(async ({ page }) => {
   await disableServiceWorker(page);
 });
@@ -63,7 +70,7 @@ test('salvar o nome troca cabeçalho, título da aba e o que vai pra API', async
   await expect(page.locator('#settingsPanel')).toBeHidden();
   await expect(page.locator('#brandTitle')).toHaveText('Pneus do Arthur');
   await expect(page).toHaveTitle('Pneus do Arthur');
-  expect(puts).toEqual([{ appName: 'Pneus do Arthur', logo: null }]);
+  expect(puts).toEqual([{ appName: 'Pneus do Arthur', logo: null, accentColor: null }]);
   expect(state.settings.appName).toBe('Pneus do Arthur');
 });
 
@@ -103,6 +110,116 @@ test('desktop: botões Configurações/Sair cabem na barra lateral (sem rolagem 
   });
   expect(m.overflow).toBeLessThanOrEqual(0);
   expect(m.inside).toBe(true);
+});
+
+/* ==========================================================================
+   Cor do sistema
+========================================================================== */
+
+test('escolher uma cor mostra a prévia na hora e salvar grava na conta', async ({ page }) => {
+  const state = await installCommonMocks(page, { tires: buildFakeTires(2) });
+  const puts = watchSettingsPuts(page);
+  await bootIntoApp(page);
+  await waitForContentReady(page);
+  expect(await accent(page)).toBe(DEFAULT_ACCENT);
+
+  await page.click('#settingsBtn');
+  await expect(page.locator('.accent-swatch[aria-label="Vermelho (padrão)"]')).toHaveAttribute('aria-checked', 'true');
+  await page.click('.accent-swatch[aria-label="Azul"]');
+  await expect(page.locator('.accent-swatch[aria-label="Azul"]')).toHaveAttribute('aria-checked', 'true');
+  expect(await accent(page), 'prévia ao vivo antes de salvar').toBe('#1c6dd0');
+  expect(puts).toEqual([]);
+
+  await page.click('#saveSettingsBtn');
+  await expect(page.locator('#settingsPanel')).toBeHidden();
+  expect(puts).toEqual([{ appName: null, logo: null, accentColor: '#1c6dd0' }]);
+  expect(state.settings.accentColor).toBe('#1c6dd0');
+  expect(await accent(page)).toBe('#1c6dd0');
+  // botão principal usa a cor nova de verdade
+  const bg = await page.locator('#saveSettingsBtn').evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(bg).toBe('rgb(28, 109, 208)');
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#1c6dd0');
+});
+
+test('cancelar desfaz a prévia da cor', async ({ page }) => {
+  await installCommonMocks(page, { tires: buildFakeTires(1), settings: { appName: null, logo: null, accentColor: '#2f9e44' } });
+  const puts = watchSettingsPuts(page);
+  await bootIntoApp(page);
+  await expect.poll(() => accent(page)).toBe('#2f9e44');
+
+  await page.click('#settingsBtn');
+  await expect(page.locator('.accent-swatch[aria-label="Verde"]')).toHaveAttribute('aria-checked', 'true');
+  await page.click('.accent-swatch[aria-label="Roxo"]');
+  expect(await accent(page)).toBe('#7048e8');
+  await page.click('#cancelSettingsBtn');
+
+  expect(await accent(page)).toBe('#2f9e44');
+  expect(puts).toEqual([]);
+});
+
+test('cor livre pelo seletor e volta pro padrão', async ({ page }) => {
+  await installCommonMocks(page, { tires: buildFakeTires(1) });
+  const puts = watchSettingsPuts(page);
+  await bootIntoApp(page);
+
+  await page.click('#settingsBtn');
+  await page.locator('#setAccentCustom').evaluate((el) => {
+    el.value = '#123456';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#accentCustomHex')).toHaveText('#123456');
+  await expect(page.locator('.accent-swatch[aria-checked="true"]')).toHaveCount(0);
+  await page.click('#saveSettingsBtn');
+  expect(puts[0].accentColor).toBe('#123456');
+
+  await page.click('#settingsBtn');
+  await expect(page.locator('#accentCustomHex')).toHaveText('#123456');
+  await page.click('.accent-swatch[aria-label="Vermelho (padrão)"]');
+  await page.click('#saveSettingsBtn');
+  expect(puts[1].accentColor, 'padrão é gravado como null').toBe(null);
+  expect(await accent(page)).toBe(DEFAULT_ACCENT);
+});
+
+test('cor clara continua legível: texto do botão fica escuro', async ({ page }) => {
+  await installCommonMocks(page, { tires: buildFakeTires(1), settings: { appName: null, logo: null, accentColor: '#ffe066' } });
+  await bootIntoApp(page);
+  await expect.poll(() => accent(page)).toBe('#ffe066');
+  const ink = await page.evaluate(() => getComputedStyle(document.getElementById('appScreen')).getPropertyValue('--accent-ink').trim());
+  expect(ink.toLowerCase()).toBe('#1e1f22');
+  // texto colorido sobre fundo claro é escurecido até passar no contraste
+  const text = await page.evaluate(() => getComputedStyle(document.getElementById('appScreen')).getPropertyValue('--accent-text').trim());
+  expect(text.toLowerCase()).not.toBe('#ffe066');
+});
+
+test('cabeçalho do PDF usa a cor do sistema da conta', async ({ page }) => {
+  await installCommonMocks(page, { tires: buildFakeTires(3), settings: { appName: null, logo: null, accentColor: '#2f9e44' } });
+  await bootIntoApp(page);
+  await waitForContentReady(page);
+  await expect.poll(() => accent(page)).toBe('#2f9e44');
+
+  const fill = await page.evaluate(() => {
+    let capturado = null;
+    const original = window.PdfTable.renderReport;
+    window.PdfTable.renderReport = (doc, opts) => {
+      capturado = opts.headerFill;
+      return original(doc, opts);
+    };
+    document.querySelector('.tabbar .tab[data-tab="exportar"]').click();
+    document.getElementById('exportFormatSelect').value = 'pdf';
+    document.getElementById('exportBtn').click();
+    return new Promise((r) => setTimeout(r, 300)).then(() => {
+      window.PdfTable.renderReport = original;
+      return capturado;
+    });
+  });
+  expect(fill).toEqual([47, 158, 68]);
+});
+
+test('cache adulterado com cor maliciosa é ignorado', async ({ page }) => {
+  await installCommonMocks(page, { tires: buildFakeTires(1), settings: { appName: null, logo: null, accentColor: 'red;background:url(x)' } });
+  await bootIntoApp(page);
+  await waitForContentReady(page);
+  expect(await accent(page)).toBe(DEFAULT_ACCENT);
 });
 
 test('nome em branco volta pro padrão', async ({ page }) => {
@@ -292,7 +409,7 @@ async function entrar(page, user) {
 test('trocar de conta na mesma aba troca a marca junto — nunca a da conta anterior', async ({ page }) => {
   await installCommonMocks(page, { tires: buildFakeTires(2) });
   await settingsPorConta(page, {
-    ['at-' + USER_A.id]: { appName: 'Loja do A', logo: TINY_PNG },
+    ['at-' + USER_A.id]: { appName: 'Loja do A', logo: TINY_PNG, accentColor: '#1c6dd0' },
     ['at-' + USER_B.id]: { appName: 'Loja do B', logo: null },
   });
 
@@ -301,9 +418,11 @@ test('trocar de conta na mesma aba troca a marca junto — nunca a da conta ante
   await entrar(page, USER_A);
   await expect(page.locator('#brandTitle')).toHaveText('Loja do A');
   await expect(page.locator('#appScreen')).toHaveClass(/has-custom-logo/);
+  expect(await accent(page)).toBe('#1c6dd0');
 
   await page.click('#logoutBtn');
   await expect(page.locator('#authScreen')).toBeVisible();
+  expect(await accent(page), 'login volta pra cor padrão').toBe(DEFAULT_ACCENT);
   // A tela de login é sempre padrão: nada da conta que acabou de sair.
   await expect(page.locator('#authScreen h1')).toHaveText('Estoque de Pneus');
   await expect(page.locator('#appScreen')).not.toHaveClass(/has-custom-logo/);
@@ -315,6 +434,7 @@ test('trocar de conta na mesma aba troca a marca junto — nunca a da conta ante
     // B não tem logo: não pode herdar a de A.
   });
   await expect(page).toHaveTitle('Loja do B');
+  expect(await accent(page), 'B não herda a cor de A').toBe(DEFAULT_ACCENT);
 });
 
 test('o cache local é por conta: offline, cada uma vê a sua (ou o padrão)', async ({ page }) => {

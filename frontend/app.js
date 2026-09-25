@@ -2114,6 +2114,9 @@
       subtitle: `Gerado em ${new Date().toLocaleDateString('pt-BR')} — ${rows.length} item(ns)`,
       columns,
       rows: body,
+      // cabeçalho da tabela na cor do sistema da conta
+      headerFill: window.Branding ? window.Branding.accentRgb() : undefined,
+      headerText: window.Branding ? window.Branding.accentInkRgb() : undefined,
     });
 
     const dataStr = new Date().toISOString().slice(0, 10);
@@ -2559,6 +2562,71 @@
   // Logo que a tela vai salvar: 'keep' mantém a atual, 'default' volta pro
   // padrão, uma string data URL é a nova imagem já recortada.
   let pendingLogo = 'keep';
+  // Cor que a tela vai salvar: null = padrão do app, '#rrggbb' = escolhida.
+  let pendingAccent = null;
+
+  // Paleta pronta da "Cor do sistema". A primeira é o padrão do app.
+  const ACCENT_PRESETS = [
+    ['Vermelho (padrão)', '#d71920'],
+    ['Laranja', '#e8590c'],
+    ['Âmbar', '#e3a72b'],
+    ['Verde', '#2f9e44'],
+    ['Azul-petróleo', '#0c8599'],
+    ['Azul', '#1c6dd0'],
+    ['Azul-marinho', '#1d3a8a'],
+    ['Roxo', '#7048e8'],
+    ['Rosa', '#d6336c'],
+    ['Grafite', '#3d4148'],
+  ];
+  const accentSwatches = document.getElementById('accentSwatches');
+  const setAccentCustom = document.getElementById('setAccentCustom');
+  const accentCustomHex = document.getElementById('accentCustomHex');
+  const CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  accentSwatches.innerHTML = ACCENT_PRESETS.map(([nome, cor], i) =>
+    `<button type="button" class="accent-swatch" role="radio" aria-checked="false" data-color="${i === 0 ? '' : cor}"
+       title="${nome}" aria-label="${nome}" style="--swatch:${cor};--swatch-ink:${i === 2 ? '#1E1F22' : '#FFFFFF'}">${CHECK_ICON}</button>`
+  ).join('');
+
+  function renderAccentChoice() {
+    const escolhida = pendingAccent || '';
+    let marcouPreset = false;
+    accentSwatches.querySelectorAll('.accent-swatch').forEach((b) => {
+      const on = b.dataset.color === escolhida;
+      if (on) marcouPreset = true;
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+    const custom = !marcouPreset && !!pendingAccent;
+    setAccentCustom.parentElement.classList.toggle('is-selected', custom);
+    accentCustomHex.textContent = custom ? pendingAccent.toUpperCase() : '';
+    setAccentCustom.value = pendingAccent || (window.Branding ? window.Branding.DEFAULT_ACCENT : '#d71920');
+    if (!marcouPreset && !custom) accentSwatches.querySelector('.accent-swatch').tabIndex = 0;
+  }
+
+  function chooseAccent(color) {
+    pendingAccent = color || null;
+    renderAccentChoice();
+    // prévia ao vivo no app inteiro; cancelar desfaz
+    if (window.Branding) window.Branding.previewAccent(pendingAccent || window.Branding.DEFAULT_ACCENT);
+  }
+
+  accentSwatches.addEventListener('click', (e) => {
+    const b = e.target.closest('.accent-swatch');
+    if (b) chooseAccent(b.dataset.color);
+  });
+  // setas do teclado navegam entre as cores (padrão de radiogroup)
+  accentSwatches.addEventListener('keydown', (e) => {
+    if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+    const botoes = [...accentSwatches.querySelectorAll('.accent-swatch')];
+    const i = botoes.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const prox = botoes[(i + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : botoes.length - 1)) % botoes.length];
+    chooseAccent(prox.dataset.color);
+    prox.focus();
+  });
+  setAccentCustom.addEventListener('input', () => chooseAccent(setAccentCustom.value.toLowerCase()));
   // Estado do recorte (em px lógicos do palco): imagem, zoom e deslocamento.
   let crop = null;
 
@@ -2816,8 +2884,10 @@
     setAppNameInput.value = atual.appName || '';
     setAppNameInput.placeholder = (window.Branding && window.Branding.DEFAULT_APP_NAME) || 'Estoque de Pneus';
     pendingLogo = 'keep';
+    pendingAccent = atual.accentColor || null;
     closeCrop();
     renderLogoPreview();
+    renderAccentChoice();
     settingsErr.classList.remove('show');
     settingsPanel.classList.add('open');
     setAppNameInput.focus();
@@ -2827,6 +2897,8 @@
     settingsPanel.classList.remove('open');
     closeCrop();
     pendingLogo = 'keep';
+    // desfaz a prévia (depois de salvar, a cor da conta já é a nova)
+    if (window.Branding) window.Branding.previewAccent(null);
   }
 
   async function saveSettings() {
@@ -2856,7 +2928,7 @@
 
     const forUser = window.Branding ? window.Branding.userId() : null;
     try {
-      const salvo = await api.saveSettings({ appName: appName || null, logo });
+      const salvo = await api.saveSettings({ appName: appName || null, logo, accentColor: pendingAccent });
       if (window.Branding) window.Branding.applyRemote(salvo, forUser);
       closeSettings();
       showToast('Configurações salvas.');

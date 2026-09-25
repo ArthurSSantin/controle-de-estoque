@@ -57,7 +57,8 @@ controle-de-estoque/
 │   ├── migration_fornecedor.sql
 │   ├── migration_codigo_barras.sql
 │   ├── migration_conferencia.sql
-│   └── migration_personalizacao.sql   # nome do sistema e logo por conta
+│   ├── migration_personalizacao.sql   # nome do sistema e logo por conta
+│   └── migration_cor_sistema.sql      # cor do sistema por conta
 │
 └── .github/
     └── workflows/
