@@ -1892,16 +1892,19 @@
     bindConferRowActions();
   }
 
+  // Devolve se gravou — quem chama não pode anunciar sucesso sem isso.
   async function markConferencia(id, status) {
     const t = tires.find((x) => x.id === id);
-    if (!t) return;
+    if (!t) return false;
     try {
       const updated = await api.conferencia(id, status);
       Object.assign(t, updated);
       if (activeTab === 'conferencia') loadAndRenderConferencia();
       render();
+      return true;
     } catch (e) {
       showToast(e.message || 'Não foi possível registrar a conferência. Verifique sua conexão com a API.');
+      return false;
     }
   }
 
@@ -1983,9 +1986,11 @@
         const statusEl = document.getElementById('conferScanStatus');
         const tire = findTireByScannedCode(text.trim());
         if (tire) {
-          await markConferencia(tire.id, 'presente');
+          const ok = await markConferencia(tire.id, 'presente');
           statusEl.style.display = 'block';
-          statusEl.textContent = `✓ ${tire.marca} ${tire.medida} — marcado como presente.`;
+          statusEl.textContent = ok
+            ? `✓ ${tire.marca} ${tire.medida} — marcado como presente.`
+            : `✗ ${tire.marca} ${tire.medida} — não foi possível salvar. Tente de novo.`;
         } else {
           statusEl.style.display = 'block';
           statusEl.textContent = 'Código não encontrado no estoque.';
