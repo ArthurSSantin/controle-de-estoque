@@ -158,6 +158,26 @@ test.describe('Conferência de estoque — escaneamento contínuo', () => {
     await expect(page.locator('#conferScanModal')).not.toHaveClass(/open/);
   });
 
+  test('se o servidor não salvar, o scanner NÃO diz "marcado como presente"', async ({ page }) => {
+    const tires = buildFakeTires(3);
+    const target = tires[0];
+    await mockCamera(page, target.codigoBarras);
+    await installCommonMocks(page, { tires });
+    // banco sem as colunas da conferência (migration não rodada)
+    await page.route('**/api/tires/*/conferencia', (route) =>
+      route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Banco de dados desatualizado: rode as migrations de database/ no SQL Editor do Supabase.' }) })
+    );
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+    await page.click('[data-tab="conferencia"]');
+
+    await page.click('#conferScanBtn');
+    await expect(page.locator('#conferScanStatus')).toContainText('não foi possível salvar', { timeout: 10000 });
+    await expect(page.locator('#conferScanStatus')).not.toContainText('marcado como presente');
+    await expect(page.locator('#toast')).toContainText('Banco de dados desatualizado');
+    await expect(page.locator(`#conferList .confer-row[data-id="${target.id}"]`)).not.toHaveClass(/is-presente/);
+  });
+
   test('escanear um código desconhecido avisa e mantém a câmera aberta', async ({ page }) => {
     await mockCamera(page, 'codigo-que-nao-existe-999');
     await installCommonMocks(page, { tires: buildFakeTires(2) });
