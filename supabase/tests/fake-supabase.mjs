@@ -84,9 +84,10 @@ export function createFakeSupabase({ url, anonKey, users }) {
       }
       const dot = raw.indexOf('.');
       if (dot < 0) throw pgError(400, 'PGRST100', `filtro sem operador: ${key}=${raw}`);
-      const op = raw.slice(0, dot);
+      let op = raw.slice(0, dot);
       const value = raw.slice(dot + 1);
-      if (!['eq', 'gte', 'lte'].includes(op)) throw pgError(400, 'PGRST100', `operador não suportado: ${op}`);
+      if (op === 'not' && value === 'is.null') op = 'notnull';
+      else if (!['eq', 'gte', 'lte'].includes(op)) throw pgError(400, 'PGRST100', `operador não suportado: ${op}`);
       if ((key === 'id' || key === 'tire_id') && !UUID_REGEX.test(value)) {
         throw pgError(400, '22P02', `invalid input syntax for type uuid: "${value}"`);
       }
@@ -100,6 +101,7 @@ export function createFakeSupabase({ url, anonKey, users }) {
     return filters.every(({ col, op, value }) => {
       const v = row[col];
       if (v === null || v === undefined) return false;
+      if (op === 'notnull') return true;
       if (op === 'eq') return String(v) === value;
       if (op === 'gte') return String(v) >= value;
       if (op === 'lte') return String(v) <= value;

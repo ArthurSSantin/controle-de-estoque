@@ -434,6 +434,21 @@ route('PUT', '/tires/:id/conferencia', async ({ req, params: p, token }) => {
   return json(toApi(data[0]));
 });
 
+// POST /api/conferencia/reset — começa uma conferência nova: tira a marca
+// de presente/ausente de todos os pneus da conta. O filtro por owner_id é
+// redundante com o RLS, mas o Supabase recusa UPDATE sem WHERE.
+route('POST', '/conferencia/reset', async ({ token, userId }) => {
+  const { data, error } = await db(
+    token,
+    'PATCH',
+    'tires',
+    params([['select', '*'], ['owner_id', `eq.${userId}`], ['conferido_status', 'not.is.null']]),
+    { body: { conferido_status: null, conferido_em: null }, prefer: 'return=representation' },
+  );
+  if (error) return dbErrorResponse(error);
+  return json({ reset: data.length });
+});
+
 // DELETE /api/tires/:id
 route('DELETE', '/tires/:id', async ({ params: p, token, userId }) => {
   const id = p.id;

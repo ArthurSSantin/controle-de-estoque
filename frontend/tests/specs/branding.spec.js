@@ -170,12 +170,16 @@ test('cor livre pelo seletor e volta pro padrão', async ({ page }) => {
   await expect(page.locator('#accentCustomHex')).toHaveText('#123456');
   await expect(page.locator('.accent-swatch[aria-checked="true"]')).toHaveCount(0);
   await page.click('#saveSettingsBtn');
+  await expect(page.locator('#settingsPanel')).toBeHidden();
+  await expect.poll(() => puts.length).toBe(1);
   expect(puts[0].accentColor).toBe('#123456');
 
   await page.click('#settingsBtn');
   await expect(page.locator('#accentCustomHex')).toHaveText('#123456');
   await page.click('.accent-swatch[aria-label="Vermelho (padrão)"]');
   await page.click('#saveSettingsBtn');
+  await expect(page.locator('#settingsPanel')).toBeHidden();
+  await expect.poll(() => puts.length).toBe(2);
   expect(puts[1].accentColor, 'padrão é gravado como null').toBe(null);
   expect(await accent(page)).toBe(DEFAULT_ACCENT);
 });

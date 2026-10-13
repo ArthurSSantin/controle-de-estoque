@@ -150,6 +150,33 @@ test('conferência: grava status/data sem gerar histórico; status inválido →
   assert.equal((await call('PUT', `/api/tires/${created.id}/conferencia`, { body: { status: 'talvez' } })).status, 400);
 });
 
+test('reiniciar conferência: limpa as marcas só da própria conta, sem histórico', async () => {
+  const a1 = (await call('POST', '/api/tires', { body: TIRE })).json;
+  const a2 = (await call('POST', '/api/tires', { body: { ...TIRE, medida: '195/55 R15' } })).json;
+  const a3 = (await call('POST', '/api/tires', { body: { ...TIRE, medida: '205/55 R16' } })).json;
+  const b1 = (await call('POST', '/api/tires', { token: 'token-b', body: TIRE })).json;
+  await call('PUT', `/api/tires/${a1.id}/conferencia`, { body: { status: 'presente' } });
+  await call('PUT', `/api/tires/${a2.id}/conferencia`, { body: { status: 'ausente' } });
+  await call('PUT', `/api/tires/${b1.id}/conferencia`, { token: 'token-b', body: { status: 'presente' } });
+  const historyAntes = fake.rows.tire_history.length;
+
+  const r = await call('POST', '/api/conferencia/reset');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.json, { reset: 2 }, 'só os 2 marcados da conta A');
+
+  const byId = Object.fromEntries(fake.rows.tires.map((t) => [t.id, t]));
+  for (const t of [a1, a2, a3]) {
+    assert.equal(byId[t.id].conferido_status, null);
+    assert.equal(byId[t.id].conferido_em, null);
+  }
+  assert.equal(byId[b1.id].conferido_status, 'presente', 'conta B intocada');
+  assert.equal(fake.rows.tire_history.length, historyAntes, 'reinício não vira histórico');
+
+  // sem nada marcado: ok, zero
+  assert.deepEqual((await call('POST', '/api/conferencia/reset')).json, { reset: 0 });
+  assert.equal((await call('POST', '/api/conferencia/reset', { token: 'token-invalido' })).status, 401);
+});
+
 test('excluir: 204, some do banco, histórico "excluido"', async () => {
   const { json: created } = await call('POST', '/api/tires', { body: TIRE });
   const r = await call('DELETE', `/api/tires/${created.id}`);

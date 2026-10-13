@@ -150,6 +150,20 @@ async function installCommonMocks(page, {
     return route.abort('blockedbyclient');
   });
 
+  // POST /api/conferencia/reset — limpa as marcas de conferência de todos
+  await page.route('**/api/conferencia/reset', async (route) => {
+    const req = route.request();
+    if (onRequest) onRequest(req.method(), req.url());
+    if (apiFail) return route.abort('connectionrefused');
+    let reset = 0;
+    state.tires.forEach((t) => {
+      if (t.conferidoStatus) reset++;
+      t.conferidoStatus = null;
+      t.conferidoEm = null;
+    });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reset }) });
+  });
+
   await page.route('**/api/history**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(state.history) })
   );

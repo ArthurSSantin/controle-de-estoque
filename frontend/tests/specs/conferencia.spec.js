@@ -102,6 +102,94 @@ test.describe('Conferência de estoque — fluxo manual', () => {
     await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('1');
   });
 
+  test('reiniciar conferência pede confirmação, limpa tudo e grava no servidor', async ({ page }) => {
+    const resets = [];
+    const state = await installCommonMocks(page, {
+      tires: buildFakeTires(4),
+      onRequest: (method, url) => { if (url.includes('/conferencia/reset')) resets.push(method); },
+    });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+    await page.click('[data-tab="conferencia"]');
+
+    const resetBtn = page.locator('#conferResetBtn');
+    await expect(resetBtn, 'nada marcado, nada pra reiniciar').toBeDisabled();
+
+    const rows = page.locator('#conferList .confer-row');
+    await rows.nth(0).locator('.presente-btn').click();
+    await expect(rows.nth(0)).toHaveClass(/is-presente/);
+    await rows.nth(1).locator('.ausente-btn').click();
+    await expect(page.locator('#conferStats .confer-stat.ausente b')).toHaveText('1');
+    await expect(resetBtn).toBeEnabled();
+
+    // 1º clique só pede confirmação
+    await resetBtn.click();
+    await expect(resetBtn).toContainText('Confirmar');
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('1');
+
+    await resetBtn.click();
+    await expect(page.locator('#conferStats .confer-stat.pendente b')).toHaveText('4');
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('0');
+    await expect(page.locator('#conferStats .confer-stat.ausente b')).toHaveText('0');
+    await expect(page.locator('#toast')).toContainText('Conferência reiniciada');
+    await expect(page.locator('#conferList .is-presente, #conferList .is-ausente')).toHaveCount(0);
+
+    // grava depois da janela de "Desfazer"
+    await expect.poll(() => resets, { timeout: 10000 }).toEqual(['POST']);
+    expect(state.tires.filter((t) => t.conferidoStatus)).toHaveLength(0);
+  });
+
+  test('"Desfazer" do reinício devolve as marcas sem chamar o servidor', async ({ page }) => {
+    await page.clock.install();
+    const resets = [];
+    await installCommonMocks(page, {
+      tires: buildFakeTires(3),
+      onRequest: (method, url) => { if (url.includes('/conferencia/reset')) resets.push(method); },
+    });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+    await page.click('[data-tab="conferencia"]');
+
+    const rows = page.locator('#conferList .confer-row');
+    await rows.nth(0).locator('.presente-btn').click();
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('1');
+
+    await page.click('#conferResetBtn');
+    await page.click('#conferResetBtn');
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('0');
+    await page.click('#toast .undo-btn');
+
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('1');
+    await page.clock.fastForward(10000);
+    expect(resets, 'desfeito: nada vai pro servidor').toEqual([]);
+  });
+
+  test('marcar um pneu logo após reiniciar grava o reinício antes (a marca nova não some)', async ({ page }) => {
+    const order = [];
+    const state = await installCommonMocks(page, {
+      tires: buildFakeTires(3),
+      onRequest: (method, url) => {
+        if (url.includes('/conferencia/reset')) order.push('reset');
+        else if (url.includes('/conferencia') && method === 'PUT') order.push('marca');
+      },
+    });
+    await bootIntoApp(page);
+    await waitForContentReady(page);
+    await page.click('[data-tab="conferencia"]');
+
+    const rows = page.locator('#conferList .confer-row');
+    await rows.nth(0).locator('.presente-btn').click();
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('1');
+    await page.click('#conferResetBtn');
+    await page.click('#conferResetBtn');
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('0');
+
+    await rows.nth(2).locator('.presente-btn').click();
+    await expect(page.locator('#conferStats .confer-stat.presente b')).toHaveText('1');
+    expect(order).toEqual(['marca', 'reset', 'marca']);
+    expect(state.tires.filter((t) => t.conferidoStatus === 'presente')).toHaveLength(1);
+  });
+
   test('busca da aba filtra por marca/medida', async ({ page }) => {
     const tires = buildFakeTires(10);
     await installCommonMocks(page, { tires });

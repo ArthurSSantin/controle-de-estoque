@@ -71,6 +71,13 @@
       if (!res.ok) throw new Error((await safeErr(res)) || 'Falha ao registrar conferência');
       return res.json();
     },
+    async resetConferencia() {
+      const res = await fetch(`${API_BASE}/conferencia/reset`, { method: 'POST', headers: await authHeaders() });
+      // 404 aqui = a Edge Function publicada é anterior a essa rota
+      if (res.status === 404) throw new Error('Servidor desatualizado: publique a versão nova da API (npx supabase functions deploy api).');
+      if (!res.ok) throw new Error((await safeErr(res)) || 'Falha ao reiniciar a conferência');
+      return res.json();
+    },
     async settings() {
       const res = await fetch(`${API_BASE}/settings`, { headers: await authHeaders() });
       if (!res.ok) throw new Error('Falha ao carregar as configurações');
@@ -1865,6 +1872,84 @@
       <div class="confer-stat presente"><b>${presentes}</b><span>Presentes</span></div>
       <div class="confer-stat ausente"><b>${ausentes}</b><span>Ausentes</span></div>
     `;
+    // nada marcado = nada pra reiniciar
+    const resetBtn = document.getElementById('conferResetBtn');
+    resetBtn.disabled = presentes + ausentes === 0;
+  }
+
+  /* ---------- reiniciar conferência ----------
+     Mesmo esquema da exclusão: limpa na tela na hora, mas só chama a API
+     depois de UNDO_DELAY_MS — "Desfazer" nesse meio tempo devolve as marcas
+     sem ter mexido no banco. */
+  let pendingConferReset = null; // { snapshot: [{ t, status, em }], timer }
+
+  function confirmConferReset(btn) {
+    if (btn.classList.contains('confirm')) {
+      btn.classList.remove('confirm');
+      btn.querySelector('.confer-reset-label').textContent = 'Reiniciar conferência';
+      resetConferencia();
+      return;
+    }
+    btn.classList.add('confirm');
+    btn.querySelector('.confer-reset-label').textContent = 'Confirmar: limpar todas as marcas?';
+    setTimeout(() => {
+      if (btn.classList.contains('confirm')) {
+        btn.classList.remove('confirm');
+        btn.querySelector('.confer-reset-label').textContent = 'Reiniciar conferência';
+      }
+    }, 3000);
+  }
+
+  function restoreConferSnapshot(snapshot) {
+    snapshot.forEach(({ t, status, em }) => {
+      t.conferidoStatus = status;
+      t.conferidoEm = em;
+    });
+    if (activeTab === 'conferencia') loadAndRenderConferencia();
+    render();
+  }
+
+  async function commitConferReset() {
+    if (!pendingConferReset) return true;
+    const { snapshot, timer } = pendingConferReset;
+    clearTimeout(timer);
+    pendingConferReset = null;
+    try {
+      await api.resetConferencia();
+      return true;
+    } catch (e) {
+      restoreConferSnapshot(snapshot);
+      showToast(e.message || 'Não foi possível reiniciar a conferência. Tente novamente.');
+      return false;
+    }
+  }
+
+  function resetConferencia() {
+    if (pendingConferReset) return;
+    const snapshot = tires
+      .filter((t) => t.conferidoStatus)
+      .map((t) => ({ t, status: t.conferidoStatus, em: t.conferidoEm }));
+    if (!snapshot.length) return;
+    snapshot.forEach(({ t }) => {
+      t.conferidoStatus = null;
+      t.conferidoEm = null;
+    });
+    pendingConferReset = { snapshot, timer: setTimeout(commitConferReset, UNDO_DELAY_MS) };
+    if (activeTab === 'conferencia') loadAndRenderConferencia();
+    render();
+
+    showToast(`Conferência reiniciada — ${snapshot.length} marcação(ões) limpa(s).`, {
+      actionLabel: 'Desfazer',
+      duration: UNDO_DELAY_MS,
+      onAction: () => {
+        if (!pendingConferReset) return;
+        clearTimeout(pendingConferReset.timer);
+        const { snapshot: s } = pendingConferReset;
+        pendingConferReset = null;
+        restoreConferSnapshot(s);
+        showToast('Reinício desfeito.');
+      },
+    });
   }
 
   function bindConferRowActions() {
@@ -1896,6 +1981,9 @@
   async function markConferencia(id, status) {
     const t = tires.find((x) => x.id === id);
     if (!t) return false;
+    // marcou algo logo depois de reiniciar: grava o reinício antes, senão ele
+    // chegaria no banco depois e apagaria essa marca nova
+    if (pendingConferReset && !(await commitConferReset())) return false;
     try {
       const updated = await api.conferencia(id, status);
       Object.assign(t, updated);
@@ -3062,6 +3150,7 @@
   };
 
   document.getElementById('conferScanBtn').onclick = openConferScanModal;
+  document.getElementById('conferResetBtn').onclick = (e) => confirmConferReset(e.currentTarget);
   document.getElementById('cancelConferScanBtn').onclick = closeConferScanModal;
   const debouncedConferRender = debounce(loadAndRenderConferencia, 200);
   document.getElementById('conferSearchInput').oninput = (e) => {
