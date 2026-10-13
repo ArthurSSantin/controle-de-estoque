@@ -1030,6 +1030,8 @@
   .icon-btn .icon{width:14px;height:14px;}
   .icon-btn:hover{border-color:var(--rust);color:var(--rust);background:var(--rust-bg);}
   .icon-btn.check-btn:hover{border-color:var(--green);color:var(--green);background:var(--green-bg);}
+  #conferResetBtn:disabled{opacity:.45;cursor:not-allowed;}
+  #conferResetBtn.confirm{background:var(--rust);border-color:var(--rust);color:#fff;}
   .icon-btn.confirm{
     width:auto;padding:0 12px;
     background:var(--rust);

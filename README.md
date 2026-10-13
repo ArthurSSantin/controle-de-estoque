@@ -115,8 +115,10 @@ Detalhes de cada teste em [`frontend/tests/README.md`](frontend/tests/README.md)
 | POST   | `/api/tires/bulk` | cria vários pneus de uma vez                                          |
 | PUT    | `/api/tires/:id`  | atualiza um pneu                                                       |
 | DELETE | `/api/tires/:id`  | remove um pneu                                                         |
+| PUT    | `/api/tires/:id/conferencia` | marca presente/ausente na conferência                  |
+| POST   | `/api/conferencia/reset` | limpa todas as marcas de conferência da conta               |
 | GET    | `/api/history`    | histórico de movimentações (`?limit=`, `?tireId=`, `?from=`, `?to=`) |
-| GET    | `/api/settings`   | personalização da conta (nome do sistema e logo)                      |
+| GET    | `/api/settings`   | personalização da conta (nome, logo e cor do sistema)                 |
 | PUT    | `/api/settings`   | salva a personalização da conta                                       |
 
 Todas as rotas exigem um token JWT do Supabase Auth no cabeçalho `Authorization`.
