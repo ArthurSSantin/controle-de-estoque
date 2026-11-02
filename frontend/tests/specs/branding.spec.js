@@ -18,7 +18,7 @@ const LOGO_FIXTURE = path.join(__dirname, '..', 'fixtures', 'codes', 'qr.png');
 const TINY_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
-const STORAGE_KEY = 'sb-oytoeuoehoqdkhnhuuyy-auth-token';
+const STORAGE_KEY = 'sb-nshuziaceagrkkzngrrx-auth-token';
 const USER_A = { id: 'user-aaa', email: 'a@loja.com' };
 const USER_B = { id: 'user-bbb', email: 'b@loja.com' };
 

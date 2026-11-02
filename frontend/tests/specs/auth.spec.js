@@ -4,7 +4,7 @@
 const { test, expect } = require('@playwright/test');
 const { buildFakeTires, installCommonMocks, disableServiceWorker, waitForContentReady } = require('../helpers/mock-app');
 
-const STORAGE_KEY = 'sb-oytoeuoehoqdkhnhuuyy-auth-token';
+const STORAGE_KEY = 'sb-nshuziaceagrkkzngrrx-auth-token';
 const USER = { id: 'user-1', email: 'loja@exemplo.com' };
 
 function sessionBody(access, refresh, { expiresIn = 3600, now = Date.now() } = {}) {
