@@ -146,6 +146,23 @@
   display:none;
 }
 .auth-err.show{display:block;}
+.auth-err.ok{color:var(--green);}
+/* link discreto: "Esqueci minha senha", "Voltar para o login" */
+.auth-link{
+  display:block;
+  margin:14px auto 0;
+  background:none;
+  border:none;
+  padding:4px;
+  font-family:'Inter',sans-serif;
+  font-size:13px;
+  font-weight:600;
+  color:var(--ink-soft);
+  text-decoration:underline;
+  text-underline-offset:3px;
+  cursor:pointer;
+}
+.auth-link:hover{color:var(--ink);}
 .auth-loading{
   min-height:100vh;
   display:flex;
