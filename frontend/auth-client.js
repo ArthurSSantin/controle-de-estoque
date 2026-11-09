@@ -1,7 +1,8 @@
 // Cliente de autenticação próprio — fala direto com a API REST do Supabase
 // Auth (GoTrue), sem o supabase-js. Cobre só o que o app usa: login por
-// e-mail/senha, cadastro, logout, sessão persistida com refresh automático,
-// sessão vinda do link de confirmação de e-mail e aviso de mudança de estado.
+// e-mail/senha, cadastro, logout, recuperação de senha, sessão persistida
+// com refresh automático, sessão vinda dos links enviados por e-mail
+// (confirmação e recuperação) e aviso de mudança de estado.
 //
 // A sessão fica no localStorage na MESMA chave e formato que o supabase-js
 // usava (sb-<projeto>-auth-token), então quem já estava logado continua
@@ -20,6 +21,7 @@
     let session = readStoredSession();
     let refreshPromise = null;
     let refreshTimer = null;
+    let urlError = null; // erro devolvido por um link de e-mail (#error=...)
 
     /* ---------- armazenamento ---------- */
 
@@ -205,6 +207,26 @@
       return { error: null };
     }
 
+    // Manda o e-mail com o link de redefinição. O Supabase só usa
+    // `redirectTo` se a URL estiver liberada em Authentication → URL
+    // Configuration; senão o link volta pra Site URL do projeto.
+    async function resetPasswordForEmail(email, { redirectTo } = {}) {
+      const qs = redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : '';
+      const { error } = await request('POST', `/recover${qs}`, { body: { email } });
+      return { data: {}, error };
+    }
+
+    // Troca a senha (ou outro dado) do usuário logado — no fluxo de
+    // recuperação, a sessão é a que veio no link do e-mail.
+    async function updateUser(attrs) {
+      const { data: { session: s } } = await getSession();
+      if (!s) return { data: { user: null }, error: { message: 'Sessão expirada. Peça um novo link.', status: 401 } };
+      const { data, error } = await request('PUT', '/user', { body: attrs, token: s.access_token });
+      if (error) return { data: { user: null }, error };
+      setSession({ ...s, user: data }, 'USER_UPDATED');
+      return { data: { user: data }, error: null };
+    }
+
     function onAuthStateChange(cb) {
       listeners.add(cb);
       return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } };
@@ -214,12 +236,21 @@
 
     // Link de confirmação de e-mail / recuperação volta pro site com a
     // sessão no hash: #access_token=...&refresh_token=...&expires_in=...
+    // (type=recovery no link de "esqueci minha senha"). Link vencido ou já
+    // usado volta com #error=...&error_code=otp_expired&error_description=...
     async function detectSessionInUrl() {
       const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
       if (!hash) return;
       const p = new URLSearchParams(hash);
       if (!p.has('access_token') && !p.has('error') && !p.has('error_description')) return;
       history.replaceState(null, '', window.location.pathname + window.location.search);
+      if (p.has('error') || p.has('error_description')) {
+        urlError = {
+          code: p.get('error_code') || p.get('error') || '',
+          message: p.get('error_description') || p.get('error') || '',
+        };
+        return;
+      }
 
       const accessToken = p.get('access_token');
       const refreshToken = p.get('refresh_token');
@@ -232,7 +263,7 @@
         expires_in: p.get('expires_in'),
         expires_at: p.get('expires_at'),
         token_type: p.get('token_type'),
-      }, user), 'SIGNED_IN');
+      }, user), p.get('type') === 'recovery' ? 'PASSWORD_RECOVERY' : 'SIGNED_IN');
     }
 
     // Outra aba logou, deslogou ou renovou o token.
@@ -245,6 +276,12 @@
       if (!next && hadSession) emit('SIGNED_OUT', null);
       else if (next && !hadSession) emit('SIGNED_IN', next);
       else if (next) emit('TOKEN_REFRESHED', next);
+    });
+
+    // Link do e-mail aberto numa aba onde o app já estava: só o #hash muda,
+    // a página não recarrega — confere o hash de novo.
+    window.addEventListener('hashchange', () => {
+      detectSessionInUrl().catch(() => {});
     });
 
     // Timers de abas em segundo plano atrasam; ao voltar pra aba, confere.
@@ -271,7 +308,16 @@
       signInWithPassword,
       signUp,
       signOut,
+      resetPasswordForEmail,
+      updateUser,
       onAuthStateChange,
+      /** Erro que um link de e-mail trouxe na URL (uma vez só). */
+      takeUrlError: async () => {
+        await ready;
+        const e = urlError;
+        urlError = null;
+        return e;
+      },
     };
   }
 

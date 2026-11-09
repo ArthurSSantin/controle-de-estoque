@@ -18,7 +18,7 @@ function sessionBody(access, refresh, { expiresIn = 3600, now = Date.now() } = {
   };
 }
 
-// Registra um GoTrue falso; cada handler recebe { body, headers, url } e
+// Registra um GoTrue falso; cada handler recebe { body, headers, url, method } e
 // devolve { status, json } ou 'abort' (simula queda de rede).
 async function fakeGoTrue(page, handlers) {
   const calls = [];
@@ -29,10 +29,11 @@ async function fakeGoTrue(page, handlers) {
     const headers = await req.allHeaders();
     let key = url.pathname.replace(/^.*\/auth\/v1\//, '');
     if (key === 'token') key = `token:${url.searchParams.get('grant_type')}`;
-    calls.push({ key, body, headers, url });
+    const method = req.method();
+    calls.push({ key, body, headers, url, method });
     const handler = handlers[key];
     if (!handler) return route.fulfill({ status: 500, body: `sem handler pra ${key}` });
-    const out = await handler({ body, headers, url });
+    const out = await handler({ body, headers, url, method });
     if (out === 'abort') return route.abort('internetdisconnected');
     return route.fulfill({ status: out.status || 200, contentType: 'application/json', body: out.json ? JSON.stringify(out.json) : '' });
   });
@@ -217,4 +218,134 @@ test('link de confirmação de e-mail entra direto e limpa o token da URL', asyn
   expect(page.url()).not.toContain('access_token');
   expect((await storedSession(page)).refresh_token).toBe('rt-link');
   expect(calls.map((c) => c.key)).toEqual(['user']);
+});
+
+/* ==========================================================================
+   Recuperar senha
+========================================================================== */
+
+test('"Esqueci minha senha" manda o link pro e-mail, voltando pra esta página', async ({ page }) => {
+  const calls = await fakeGoTrue(page, { recover: () => ({ json: {} }) });
+  await page.goto('/index.html');
+  await page.fill('#loginEmail', USER.email);
+  await page.click('#showRecover');
+
+  await expect(page.locator('#recoverForm')).toBeVisible();
+  await expect(page.locator('#loginForm')).toBeHidden();
+  await expect(page.locator('#authTabs')).toBeHidden();
+  await expect(page.locator('#recoverEmail'), 'aproveita o e-mail já digitado').toHaveValue(USER.email);
+  await page.click('#recoverForm button[type="submit"]');
+
+  await expect(page.locator('#recoverErr')).toContainText('Se existir uma conta com esse e-mail');
+  const recover = calls.find((c) => c.key === 'recover');
+  expect(recover.method).toBe('POST');
+  expect(recover.body).toEqual({ email: USER.email });
+  expect(recover.url.searchParams.get('redirect_to')).toBe(new URL(page.url()).origin + '/index.html');
+  expect(recover.headers.authorization, 'pedido anônimo: só a chave pública').toBeUndefined();
+
+  await page.click('#backToLogin');
+  await expect(page.locator('#loginForm')).toBeVisible();
+  await expect(page.locator('#authTabs')).toBeVisible();
+});
+
+test('pedir link de novo rápido demais (429) pede pra esperar', async ({ page }) => {
+  await fakeGoTrue(page, { recover: () => ({ status: 429, json: { code: 429, error_code: 'over_email_send_rate_limit', msg: 'For security purposes, you can only request this after 59 seconds.' } }) });
+  await page.goto('/index.html');
+  await page.click('#showRecover');
+  await page.fill('#recoverEmail', USER.email);
+  await page.click('#recoverForm button[type="submit"]');
+  await expect(page.locator('#recoverErr')).toHaveText('Aguarde um minuto antes de pedir outro link.');
+});
+
+const RECOVERY_HASH = '#access_token=at-rec&refresh_token=rt-rec&expires_in=3600&token_type=bearer&type=recovery';
+
+test('link de recuperação abre "Nova senha" (não o app) e salvar troca a senha e entra', async ({ page }) => {
+  const calls = await fakeGoTrue(page, {
+    user: ({ method, headers, body }) => {
+      if (headers.authorization !== 'Bearer at-rec') return { status: 401, json: { msg: 'invalid JWT' } };
+      if (method === 'PUT') return { json: { ...USER, updated_at: 'agora', _senha: body.password } };
+      return { json: USER };
+    },
+  });
+  await page.goto('/index.html' + RECOVERY_HASH);
+
+  await expect(page.locator('#newPasswordForm')).toBeVisible();
+  await expect(page.locator('#appScreen')).toBeHidden();
+  await expect(page.locator('#newPasswordEmail')).toHaveText(USER.email);
+  expect(page.url()).not.toContain('access_token');
+
+  // senhas diferentes: nem chama o servidor
+  await page.fill('#newPassword', 'senha-nova-1');
+  await page.fill('#newPasswordConfirm', 'senha-nova-2');
+  await page.click('#newPasswordForm button[type="submit"]');
+  await expect(page.locator('#newPasswordErr')).toHaveText('As duas senhas não são iguais.');
+  expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(0);
+
+  await page.fill('#newPasswordConfirm', 'senha-nova-1');
+  await page.click('#newPasswordForm button[type="submit"]');
+  await expect(page.locator('#newPasswordErr')).toContainText('Senha alterada');
+  await expect(page.locator('#appScreen')).toBeVisible();
+  await expect(page.locator('#userEmail')).toHaveText(USER.email);
+
+  const put = calls.find((c) => c.key === 'user' && c.method === 'PUT');
+  expect(put.body).toEqual({ password: 'senha-nova-1' });
+  expect(put.headers.authorization).toBe('Bearer at-rec');
+
+  // depois de trocar, recarregar entra direto no app
+  await page.reload();
+  await expect(page.locator('#appScreen')).toBeVisible();
+  await expect(page.locator('#newPasswordForm')).toBeHidden();
+});
+
+test('recarregar a página no meio da recuperação continua pedindo a senha nova', async ({ page }) => {
+  await fakeGoTrue(page, { user: () => ({ json: USER }) });
+  await page.goto('/index.html' + RECOVERY_HASH);
+  await expect(page.locator('#newPasswordForm')).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator('#newPasswordForm')).toBeVisible();
+  await expect(page.locator('#appScreen')).toBeHidden();
+});
+
+test('senha nova igual à antiga mostra mensagem certa', async ({ page }) => {
+  await fakeGoTrue(page, {
+    user: ({ method }) => (method === 'PUT'
+      ? { status: 422, json: { code: 422, error_code: 'same_password', msg: 'New password should be different from the old password.' } }
+      : { json: USER }),
+  });
+  await page.goto('/index.html' + RECOVERY_HASH);
+  await page.fill('#newPassword', 'mesma-senha');
+  await page.fill('#newPasswordConfirm', 'mesma-senha');
+  await page.click('#newPasswordForm button[type="submit"]');
+  await expect(page.locator('#newPasswordErr')).toHaveText('A nova senha precisa ser diferente da atual.');
+  await expect(page.locator('#appScreen')).toBeHidden();
+});
+
+test('cancelar a troca de senha encerra a sessão do link e volta pro login', async ({ page }) => {
+  const calls = await fakeGoTrue(page, { user: () => ({ json: USER }), logout: () => ({ status: 204 }) });
+  await page.goto('/index.html' + RECOVERY_HASH);
+  await expect(page.locator('#newPasswordForm')).toBeVisible();
+
+  await page.click('#cancelNewPassword');
+  await expect(page.locator('#loginForm')).toBeVisible();
+  await expect(page.locator('#newPasswordForm')).toBeHidden();
+  expect(await storedSession(page)).toBeNull();
+  await expect.poll(() => calls.filter((c) => c.key === 'logout').length).toBe(1);
+});
+
+test('link de e-mail vencido avisa no login em vez de falhar calado', async ({ page }) => {
+  const calls = await fakeGoTrue(page, {});
+  await page.goto('/index.html#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
+  await expect(page.locator('#loginErr')).toContainText('expirou ou já foi usado');
+  expect(page.url()).not.toContain('error=');
+  expect(calls).toEqual([]);
+});
+
+test('link de recuperação aberto na aba onde o app já estava (só o # muda) também funciona', async ({ page }) => {
+  await fakeGoTrue(page, { user: () => ({ json: USER }) });
+  await page.goto('/index.html');
+  await expect(page.locator('#loginForm')).toBeVisible();
+  await page.evaluate((hash) => { window.location.hash = hash; }, RECOVERY_HASH);
+  await expect(page.locator('#newPasswordForm')).toBeVisible();
+  expect(page.url()).not.toContain('access_token');
 });

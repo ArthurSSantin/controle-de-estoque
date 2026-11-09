@@ -16,6 +16,7 @@ Sistema web para controle de estoque de pneus de uma loja, com múltiplas contas
 - Dashboard com gráfico de entradas x saídas de quantidade nos últimos 14 dias.
 - Personalização por conta: cada login define o nome do sistema e a logo do cabeçalho (com recorte da imagem para o círculo padrão). O que uma conta escolhe nunca aparece para outra — quem não personaliza continua vendo o padrão.
 - Login multiempresa com isolamento de dados por conta (Row Level Security).
+- Recuperação de senha por e-mail ("Esqueci minha senha" → link → nova senha).
 - Instalável como PWA (ícone na tela inicial, abre sem barra de navegador) e com Service Worker para a casca do app continuar acessível offline.
 
 ## Stack
@@ -73,6 +74,7 @@ controle-de-estoque/
 1. Crie um projeto em [supabase.com](https://supabase.com).
 2. No **SQL Editor**, rode `database/schema.sql` e, em seguida, as migrations em `database/`.
 3. Em **Project Settings → API**, copie a **Project URL** e a **anon key**.
+4. Em **Authentication → URL Configuration**, coloque o endereço publicado do app em **Site URL** e também em **Redirect URLs** — é pra lá que voltam os links de confirmação de cadastro e de recuperação de senha.
 
 ### 2. Backend (Edge Function)
 

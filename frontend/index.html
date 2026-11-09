@@ -69,7 +69,7 @@
   <div class="auth-form-panel">
     <div class="auth-card">
       <span class="auth-eyebrow" id="authEyebrow">Bem-vindo de volta</span>
-      <div class="auth-tabs">
+      <div class="auth-tabs" id="authTabs">
         <button type="button" class="auth-tab active" id="showLogin">Entrar</button>
         <button type="button" class="auth-tab" id="showSignup">Criar conta</button>
       </div>
@@ -92,6 +92,44 @@
           </div>
         </div>
         <button type="submit" class="btn btn-primary auth-btn">Entrar</button>
+        <button type="button" class="auth-link" id="showRecover">Esqueci minha senha</button>
+      </form>
+
+      <!-- Recuperar senha: manda o link de redefinição por e-mail -->
+      <form id="recoverForm" style="display:none;">
+        <p class="auth-sub">Informe o e-mail da sua conta. Enviaremos um link para você criar uma senha nova.</p>
+        <div class="auth-err" id="recoverErr"></div>
+        <div class="auth-field">
+          <label for="recoverEmail">E-mail</label>
+          <div class="auth-field-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input type="email" id="recoverEmail" required placeholder="voce@suaempresa.com" autocomplete="email">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary auth-btn">Enviar link</button>
+        <button type="button" class="auth-link" id="backToLogin">Voltar para o login</button>
+      </form>
+
+      <!-- Nova senha: aparece quando a pessoa volta pelo link do e-mail -->
+      <form id="newPasswordForm" style="display:none;">
+        <p class="auth-sub">Crie uma senha nova para <b id="newPasswordEmail"></b>.</p>
+        <div class="auth-err" id="newPasswordErr"></div>
+        <div class="auth-field">
+          <label for="newPassword">Nova senha</label>
+          <div class="auth-field-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="newPassword" required placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="auth-field">
+          <label for="newPasswordConfirm">Confirmar nova senha</label>
+          <div class="auth-field-icon">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="newPasswordConfirm" required placeholder="Repita a senha" autocomplete="new-password">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary auth-btn">Salvar nova senha</button>
+        <button type="button" class="auth-link" id="cancelNewPassword">Cancelar</button>
       </form>
 
       <form id="signupForm" style="display:none;">
