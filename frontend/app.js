@@ -515,16 +515,35 @@
     'ATLAS', 'GITI', 'SAILUN', 'ANTARES', 'FORMULA', 'ROYALE', 'JK',
   ];
 
+  // Jeitos de escrever medida que aparecem nas notas, do mais específico pro
+  // mais solto. Tudo vira o formato do app: "175/65 R14".
+  //   31X10.50R15 (off-road) · 225/45ZR17 · 175/70R13C · 215/75R17.5
+  //   185/70-14 (diagonal) · 175 65 R14 · 175/70 13 (sem o R)
+  const MEDIDA_PATTERNS = [
+    [/(?<!\d)(\d{2})\s*X\s*(\d{1,2}[.,]\d{2})\s*Z?R\s*(\d{2})(?!\d)/, (m) => `${m[1]}X${m[2].replace(',', '.')} R${m[3]}`],
+    [/(?<!\d)(\d{3})\s*\/\s*(\d{2,3})\s*-?\s*Z?R\s*-?\s*(\d{2}(?:[.,]5)?)(C?)(?![\dA-Z])/, (m) => `${m[1]}/${m[2]} R${m[3].replace(',', '.')}${m[4]}`],
+    [/(?<!\d)(\d{3})\s+(\d{2})\s*Z?R\s*(\d{2}(?:[.,]5)?)(?![\dA-Z])/, (m) => `${m[1]}/${m[2]} R${m[3].replace(',', '.')}`],
+    [/(?<!\d)(\d{3})\s*\/\s*(\d{2,3})\s*-\s*(\d{2}(?:[.,]5)?)(?!\d)/, (m) => `${m[1]}/${m[2]} R${m[3].replace(',', '.')}`],
+    [/(?<!\d)(\d{3})\s*[\/\s]\s*(\d{2})\s*[\/\s]\s*(1[3-9]|2[0-2])(?![\d.,])/, (m) => `${m[1]}/${m[2]} R${m[3]}`],
+  ];
+
+  function extractMedida(text) {
+    for (const [re, fmt] of MEDIDA_PATTERNS) {
+      const m = text.match(re);
+      if (m) return { medida: fmt(m), raw: m[0] };
+    }
+    return { medida: '', raw: '' };
+  }
+
   function guessMarcaMedida(rawDescricao) {
     const text = String(rawDescricao || '').toUpperCase();
 
-    const medidaMatch = text.match(/\d{3}\/\d{2,3}\s*R\s*\d{2}[A-Z]?/);
-    let medida = medidaMatch ? medidaMatch[0].replace(/\s+/g, '') : '';
-    medida = medida.replace(/(\d)(R)/, '$1 $2'); // "175/65R14" -> "175/65 R14"
+    const { medida, raw } = extractMedida(text);
 
-    let rest = medidaMatch ? text.replace(medidaMatch[0], ' ') : text;
+    let rest = raw ? text.replace(raw, ' ') : text;
     rest = rest
-      .replace(/\bPNEU\b/g, ' ')
+      .replace(/\bPNEUS?\b/g, ' ')
+      .replace(/\bARO\s*\d{2}\b/g, ' ')
       .replace(/\(IP\)/g, ' ')
       .replace(/\bXL\b/g, ' ')
       .replace(/\bTL\b/g, ' ')
@@ -1031,6 +1050,7 @@
       </div>
       <div class="field"><label>Fornecedor</label><input type="text" class="b-fornecedor" placeholder="Opcional"></div>
       <button class="rm" title="Remover linha">✕</button>
+      ${prefill.descricao ? `<div class="batch-desc">Na nota: ${escapeHtml(prefill.descricao)}</div>` : ''}
     `;
     if (prefill.marca) div.querySelector('.b-marca').value = prefill.marca;
     if (prefill.medida) div.querySelector('.b-medida').value = prefill.medida;
@@ -1046,7 +1066,9 @@
   function rowsToItems(containerId, errEl, notaRefValue, origem) {
     const rows = document.querySelectorAll(`#${containerId} .batch-row`);
     const items = [];
+    const invalid = [];
     for (const row of rows) {
+      row.classList.remove('invalid');
       const marca = row.querySelector('.b-marca').value.trim();
       const medida = row.querySelector('.b-medida').value.trim();
       const qtd = row.querySelector('.b-qtd').value.trim();
@@ -1054,15 +1076,25 @@
       const condicao = row.querySelector('.b-condicao').value;
       const fornecedor = row.querySelector('.b-fornecedor').value.trim();
       if (!marca && !medida && !qtd) continue; // linha vazia, ignora
+      row.querySelectorAll('.bad').forEach((el) => el.classList.remove('bad'));
       if (!marca || !medida || qtd === '' || !validMedida(medida)) {
-        errEl.textContent = 'Verifique se todas as linhas têm marca, medida válida (R13–R22) e quantidade.';
-        errEl.classList.add('show');
-        return null;
+        row.classList.add('invalid');
+        if (!marca) row.querySelector('.b-marca').classList.add('bad');
+        if (!medida || !validMedida(medida)) row.querySelector('.b-medida').classList.add('bad');
+        if (qtd === '') row.querySelector('.b-qtd').classList.add('bad');
+        invalid.push(row);
+        continue;
       }
       items.push({
         marca, medida, quantidade: Number(qtd), preco, condicao, fornecedor: fornecedor || null,
         novo: true, notaRef: notaRefValue, origem: origem === 'empresa' ? 'empresa' : 'local',
       });
+    }
+    if (invalid.length) {
+      errEl.textContent = `${invalid.length} linha(s) marcada(s) em vermelho precisa(m) de marca, medida válida (aro R13 a R22, ex: 175/65 R14) e quantidade — corrija ou remova.`;
+      errEl.classList.add('show');
+      invalid[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return null;
     }
     return items;
   }
@@ -1093,24 +1125,51 @@
       throw new Error('Não encontrei produtos nesse XML. Confira se é o arquivo de NF-e correto.');
     }
 
-    const items = dets
-      .map((det) => {
-        const prod = det.querySelector('prod');
-        if (!prod) return null;
-        const xProd = prod.querySelector('xProd')?.textContent || '';
-        const qCom = prod.querySelector('qCom')?.textContent || '';
-        const vUnCom = prod.querySelector('vUnCom')?.textContent || '';
-        const { marca, medida } = guessMarcaMedida(xProd);
-        return {
-          marca,
-          medida,
-          quantidade: qCom ? Math.round(parseFloat(qCom)) : '',
-          preco: vUnCom ? Number(vUnCom).toFixed(2).replace('.', ',') : '',
-        };
-      })
-      .filter(Boolean);
+    const items = [];
+    const skipped = [];
+    dets.forEach((det) => {
+      const prod = det.querySelector('prod');
+      if (!prod) return;
+      const xProd = (prod.querySelector('xProd')?.textContent || '').trim();
+      const ncm = (prod.querySelector('NCM')?.textContent || '').trim();
+      const qCom = prod.querySelector('qCom')?.textContent || '';
+      const vUnCom = prod.querySelector('vUnCom')?.textContent || '';
+      const { marca, medida } = guessMarcaMedida(xProd);
+      // NCM 4011 = pneu novo, 4012 = recauchutado/usado. Frete, válvula,
+      // câmara de ar etc. vêm na mesma nota: sem medida e sem NCM de pneu,
+      // fica de fora (avisado na tela) em vez de travar o salvamento.
+      if (!medida && !/^401[12]/.test(ncm)) {
+        skipped.push(xProd || '(sem descrição)');
+        return;
+      }
+      items.push({
+        marca,
+        medida,
+        quantidade: qCom ? Math.round(parseFloat(qCom)) : '',
+        preco: vUnCom ? Number(vUnCom).toFixed(2).replace('.', ',') : '',
+        descricao: xProd,
+      });
+    });
 
-    return { chave, items };
+    if (items.length === 0) {
+      throw new Error('Nenhum pneu encontrado nesse XML' + (skipped.length ? ` (só: ${skipped.slice(0, 3).join(', ')}).` : '.'));
+    }
+
+    return { chave, items, skipped };
+  }
+
+  // O XML diz a própria codificação (<?xml ... encoding="ISO-8859-1"?>);
+  // file.text() sempre lê como UTF-8 e estragaria os acentos de notas
+  // antigas em Latin-1.
+  async function readXmlFile(file) {
+    const buf = await file.arrayBuffer();
+    const head = new TextDecoder('ascii').decode(new Uint8Array(buf, 0, Math.min(buf.byteLength, 200)));
+    const enc = (head.match(/encoding\s*=\s*["']([\w.-]+)["']/i) || [])[1] || 'utf-8';
+    try {
+      return new TextDecoder(enc).decode(buf);
+    } catch (e) {
+      return new TextDecoder('utf-8').decode(buf);
+    }
   }
 
   function openXmlPanel() {
@@ -1138,8 +1197,8 @@
     document.getElementById('xmlResult').style.display = 'none';
 
     try {
-      const text = await file.text();
-      const { chave, items } = parseNFeXml(text);
+      const text = await readXmlFile(file);
+      const { chave, items, skipped } = parseNFeXml(text);
 
       xmlNota = { chave };
       statusEl.style.display = 'none';
@@ -1149,7 +1208,15 @@
       document.getElementById('xmlRows').innerHTML = '';
       batchRowCount = 0;
       items.forEach((item) => addBatchRow('xmlRows', item));
-      showToast(`${items.length} produto(s) lidos do XML. Confira antes de salvar.`);
+      const skippedEl = document.getElementById('xmlSkipped');
+      skippedEl.style.display = skipped.length ? 'block' : 'none';
+      skippedEl.textContent = skipped.length
+        ? `Ignorado(s) por não ser pneu: ${skipped.join(' · ')}`
+        : '';
+      const semMedida = items.filter((i) => !i.medida).length;
+      showToast(semMedida
+        ? `${items.length} pneu(s) lidos — ${semMedida} sem medida reconhecida, complete antes de salvar.`
+        : `${items.length} pneu(s) lidos do XML. Confira antes de salvar.`);
     } catch (err) {
       statusEl.textContent = err.message || 'Não foi possível ler esse XML.';
     }
@@ -1175,7 +1242,8 @@
       render();
       showToast(summarizeCommit(createdCount, mergedCount, dedupedCount));
     } catch (e) {
-      xmlErr.textContent = 'Não foi possível salvar os itens. Verifique sua conexão com a API.';
+      // a API explica o motivo (item inválido, banco desatualizado...)
+      xmlErr.textContent = e.message || 'Não foi possível salvar os itens. Verifique sua conexão com a API.';
       xmlErr.classList.add('show');
     }
   }
