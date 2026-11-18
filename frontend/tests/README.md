@@ -30,6 +30,7 @@ npm test
 | `specs/code-reader.spec.js` | Leitor próprio de QR/código de barras (`code-reader.js`) com as imagens de `fixtures/codes/` (conferidas com o zbar): todos os formatos em 4 orientações, sem falso positivo, Reed-Solomon e tempo por quadro. |
 | `specs/branding.spec.js` | Personalização por conta (`branding.js` + pop-out Configurações): nome do sistema, recorte da logo em 256x256 e o isolamento entre contas — trocar de conta troca a marca, o cache local é por usuário e a tela de login é sempre padrão. |
 | `specs/pdf-report.spec.js` | Geração de PDF (`pdf-writer.js` + `pdf-table.js`) e leitura de PDF com o `pdf.js` vendorizado: importa um relatório gerado pelo próprio projeto e confere que nada é buscado fora da origem do app. |
+| `specs/xml-import.spec.js` | Entrada por XML de NF-e com as notas de `fixtures/nfe/`: medidas escritas de vários jeitos, itens que não são pneu, linha sem medida marcada pra corrigir, erro da API visível, nota em ISO-8859-1. |
 | `specs/regressions.spec.js` | Um teste por bug real já corrigido neste projeto (ver comentário no topo de cada `describe`) — existe pra esse bug nunca mais voltar sem ninguém perceber. |
 
 ## Como funciona o mock (`helpers/mock-app.js`)

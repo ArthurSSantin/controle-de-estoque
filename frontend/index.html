@@ -348,7 +348,7 @@
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         Escolher arquivo XML
       </label>
-      <input type="file" id="xmlFileInput" accept=".xml,text/xml" style="display:none;">
+      <input type="file" id="xmlFileInput" accept=".xml,text/xml,application/xml" style="display:none;">
     </div>
 
     <div id="xmlStatus" class="scan-hint" style="display:none;"></div>
@@ -362,6 +362,7 @@
         Confira os itens lidos do XML antes de salvar — corrija o que precisar.
         Eles entrarão no estoque já vinculados a esta nota e marcados como <b>novos</b>.
       </p>
+      <div class="scan-hint" id="xmlSkipped" style="display:none;"></div>
       <div id="xmlRows"></div>
       <div class="form-actions" style="justify-content:space-between;margin-top:10px;">
         <button class="btn btn-ghost" id="addXmlRowBtn">+ Adicionar linha</button>
